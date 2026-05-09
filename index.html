@@ -1,0 +1,1621 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fly Up — Controle de Atendimentos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root {
+    --gold: #C9A84C;
+    --gold-light: #E2C97E;
+    --gold-pale: #F5EDD6;
+    --green: #647746;
+    --green-dark: #4A5A32;
+    --green-pale: #EDF0E8;
+    --taupe: #776b5f;
+    --brown: #504840;
+    --cream: #F8F6F1;
+    --white: #FFFFFF;
+    --text: #2C2420;
+    --text-light: #776b5f;
+    --border: #E2D9CC;
+    --shadow: 0 4px 24px rgba(80,72,64,0.08);
+    --shadow-lg: 0 12px 48px rgba(80,72,64,0.14);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Jost', 'Helvetica Neue', sans-serif;
+    background: var(--cream);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 68px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    box-shadow: 0 2px 16px rgba(80,72,64,0.06);
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-bird {
+    width: 36px;
+    height: 20px;
+  }
+
+  .logo-text {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.5rem;
+    font-weight: 300;
+    letter-spacing: 0.2em;
+    color: var(--gold);
+  }
+
+  /* ── NAV ── */
+  nav {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .nav-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-family: 'Jost', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--taupe);
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .nav-btn:hover { color: var(--green); background: var(--green-pale); }
+  .nav-btn.active { color: var(--green); background: var(--green-pale); font-weight: 600; }
+
+  /* ── MAIN ── */
+  main {
+    flex: 1;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem 2.5rem;
+  }
+
+  @media (min-width: 1600px) {
+    main { max-width: 1600px; padding: 2.5rem 4rem; }
+    header { padding: 0 4rem; }
+  }
+
+  .page { display: none; animation: fadeIn 0.3s ease; }
+  .page.active { display: block; }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ── PAGE TITLE ── */
+  .page-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
+    font-weight: 300;
+    letter-spacing: 0.15em;
+    color: var(--green);
+    text-transform: uppercase;
+    margin-bottom: 0.3rem;
+  }
+
+  .page-subtitle {
+    font-size: 0.8rem;
+    letter-spacing: 0.08em;
+    color: var(--taupe);
+    margin-bottom: 2rem;
+    font-weight: 300;
+  }
+
+  .divider {
+    width: 48px;
+    height: 1px;
+    background: linear-gradient(90deg, var(--gold), transparent);
+    margin: 0.5rem 0 2rem;
+  }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: var(--shadow);
+  }
+
+  .card-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.1em;
+    color: var(--green);
+    font-weight: 400;
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+  }
+
+  /* ── STAT CARDS ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--white);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.25rem 1.5rem;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--gold), var(--gold-light));
+  }
+
+  .stat-label {
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--taupe);
+    margin-bottom: 0.5rem;
+    font-weight: 500;
+  }
+
+  .stat-value {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 2rem;
+    font-weight: 300;
+    color: var(--green);
+    line-height: 1;
+  }
+
+  .stat-sub {
+    font-size: 0.72rem;
+    color: var(--taupe);
+    margin-top: 0.25rem;
+    font-weight: 300;
+  }
+
+  /* ── FORMS ── */
+  .form-grid { display: grid; gap: 1rem; }
+  .form-grid-2 { grid-template-columns: 1fr 1fr; }
+  .form-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+  .form-group { display: flex; flex-direction: column; gap: 0.4rem; }
+
+  label {
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--taupe);
+    font-weight: 500;
+  }
+
+  input, select, textarea {
+    font-family: 'Jost', sans-serif;
+    font-size: 0.9rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem 0.9rem;
+    background: var(--white);
+    color: var(--text);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    width: 100%;
+  }
+
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--gold);
+    box-shadow: 0 0 0 3px rgba(201,168,76,0.12);
+  }
+
+  textarea { resize: vertical; min-height: 80px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    font-family: 'Jost', sans-serif;
+    font-size: 0.75rem;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    border: none;
+    border-radius: 6px;
+    padding: 0.65rem 1.5rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--gold), var(--gold-light));
+    color: var(--white);
+    box-shadow: 0 4px 16px rgba(201,168,76,0.3);
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(201,168,76,0.4); }
+
+  .btn-secondary {
+    background: var(--green-pale);
+    color: var(--green);
+    border: 1px solid rgba(100,119,70,0.2);
+  }
+  .btn-secondary:hover { background: var(--green); color: var(--white); }
+
+  .btn-ghost {
+    background: none;
+    color: var(--taupe);
+    border: 1px solid var(--border);
+  }
+  .btn-ghost:hover { border-color: var(--gold); color: var(--gold); }
+
+  .btn-danger {
+    background: none;
+    color: #B85450;
+    border: 1px solid rgba(184,84,80,0.3);
+    font-size: 0.7rem;
+    padding: 0.4rem 0.8rem;
+  }
+  .btn-danger:hover { background: #B85450; color: var(--white); }
+
+  .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.68rem; }
+
+  /* ── TABLES ── */
+  .table-wrap { overflow-x: auto; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.87rem; }
+
+  th {
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--taupe);
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    background: var(--cream);
+  }
+
+  td {
+    padding: 0.85rem 1rem;
+    border-bottom: 1px solid rgba(226,217,204,0.5);
+    color: var(--text);
+    vertical-align: middle;
+  }
+
+  tr:hover td { background: rgba(245,237,214,0.2); }
+
+  .badge {
+    display: inline-block;
+    font-size: 0.65rem;
+    letter-spacing: 0.06em;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  .badge-green { background: var(--green-pale); color: var(--green); }
+  .badge-gold { background: var(--gold-pale); color: #8B6914; }
+  .badge-brown { background: #EDE8E3; color: var(--brown); }
+
+  /* ── LAYOUT HELPERS ── */
+  .flex { display: flex; }
+  .flex-between { display: flex; justify-content: space-between; align-items: center; }
+  .flex-end { display: flex; justify-content: flex-end; }
+  .gap-1 { gap: 0.5rem; }
+  .gap-2 { gap: 1rem; }
+  .mt-1 { margin-top: 0.5rem; }
+  .mt-2 { margin-top: 1rem; }
+  .mt-3 { margin-top: 1.5rem; }
+  .mb-2 { margin-bottom: 1rem; }
+  .mb-3 { margin-bottom: 1.5rem; }
+
+  .charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .chart-container { position: relative; height: 260px; }
+
+  /* ── MODAL ── */
+  .modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(44,36,32,0.5);
+    backdrop-filter: blur(4px);
+    z-index: 200;
+    align-items: center;
+    justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+
+  .modal {
+    background: var(--white);
+    border-radius: 12px;
+    padding: 2rem;
+    width: 100%;
+    max-width: 520px;
+    box-shadow: var(--shadow-lg);
+    animation: fadeIn 0.2s ease;
+  }
+
+  .modal-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.4rem;
+    color: var(--green);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--taupe);
+  }
+  .empty-icon { font-size: 2.5rem; margin-bottom: 0.75rem; opacity: 0.4; }
+  .empty p { font-size: 0.85rem; letter-spacing: 0.06em; }
+
+  /* ── TOP SERVICE ROWS ── */
+  .rank-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(226,217,204,0.5);
+  }
+  .rank-item:last-child { border-bottom: none; }
+  .rank-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.5rem;
+    font-weight: 300;
+    color: var(--gold);
+    width: 28px;
+    text-align: center;
+  }
+  .rank-info { flex: 1; }
+  .rank-name { font-size: 0.87rem; font-weight: 500; color: var(--text); }
+  .rank-sub { font-size: 0.72rem; color: var(--taupe); margin-top: 0.15rem; }
+  .rank-val { font-size: 0.9rem; font-weight: 600; color: var(--green); }
+
+  /* ── FILTER BAR ── */
+  .filter-bar {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.5rem;
+    align-items: center;
+  }
+
+  .filter-bar input, .filter-bar select {
+    width: auto;
+    min-width: 150px;
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--green);
+    color: var(--white);
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-size: 0.82rem;
+    letter-spacing: 0.06em;
+    box-shadow: var(--shadow-lg);
+    z-index: 300;
+    transform: translateY(100px);
+    opacity: 0;
+    transition: all 0.3s ease;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+
+  .two-col-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  .registro-form { max-width: 720px; }
+
+  @media (max-width: 900px) {
+    .two-col-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── MOBILE NAV TOGGLE ── */
+  .hamburger {
+    display: none;
+    flex-direction: column;
+    gap: 5px;
+    cursor: pointer;
+    padding: 0.4rem;
+    background: none;
+    border: none;
+  }
+  .hamburger span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: var(--gold);
+    border-radius: 2px;
+    transition: all 0.3s;
+  }
+
+  .mobile-nav {
+    display: none;
+    position: fixed;
+    top: 68px;
+    left: 0; right: 0;
+    background: var(--white);
+    border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    z-index: 99;
+    padding: 0.75rem 1rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    animation: fadeIn 0.2s ease;
+  }
+  .mobile-nav.open { display: flex; }
+  .mobile-nav .nav-btn {
+    width: 100%;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    [style*="grid-template-columns:1fr 1fr"] { display: block !important; }
+    [style*="grid-template-columns:1fr 1fr"] > * { margin-bottom: 1.5rem; }
+  }
+
+  @media (max-width: 640px) {
+    header { padding: 0 1rem; height: 58px; }
+    main { padding: 1rem; }
+    nav { display: none; }
+    .hamburger { display: flex; }
+    .mobile-nav { top: 58px; }
+
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .form-grid-2, .form-grid-3 { grid-template-columns: 1fr; }
+    .filter-bar { flex-direction: column; align-items: stretch; }
+    .filter-bar input, .filter-bar select { width: 100%; min-width: unset; }
+
+    .page-title { font-size: 1.5rem; }
+    .stat-value { font-size: 1.5rem; }
+    .card { padding: 1rem; }
+
+    .cal-day { min-height: 54px; padding: 0.25rem; }
+    .cal-day-num { font-size: 0.85rem; }
+    .cal-event-dot { display: none; }
+    .cal-day.has-events::after {
+      content: '●';
+      display: block;
+      font-size: 0.5rem;
+      color: var(--gold);
+      text-align: center;
+    }
+
+    table { font-size: 0.78rem; }
+    th, td { padding: 0.6rem 0.5rem; }
+
+    .modal { padding: 1.25rem; margin: 1rem; max-width: calc(100vw - 2rem); }
+    .flex-between { flex-direction: column; align-items: flex-start; gap: 0.75rem; }
+    .flex-between .btn { align-self: flex-start; }
+
+    #toast { right: 1rem; left: 1rem; text-align: center; }
+  }
+
+  @media (max-width: 380px) {
+    .stats-grid { grid-template-columns: 1fr; }
+  }
+
+  /* ── CALENDAR ── */
+  .cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+    margin-bottom: 4px;
+  }
+  .cal-weekday {
+    text-align: center;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--taupe);
+    font-weight: 600;
+    padding: 0.4rem 0;
+  }
+  .cal-days {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 4px;
+  }
+  .cal-day {
+    min-height: 80px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem;
+    background: var(--white);
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .cal-day:hover { border-color: var(--gold); box-shadow: 0 2px 8px rgba(201,168,76,0.15); }
+  .cal-day.other-month { background: var(--cream); opacity: 0.5; cursor: default; }
+  .cal-day.today { border-color: var(--gold); background: var(--gold-pale); }
+  .cal-day.has-events { border-left: 3px solid var(--gold); }
+  .cal-day-num {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 1.1rem;
+    font-weight: 300;
+    color: var(--text);
+    line-height: 1;
+    margin-bottom: 0.3rem;
+  }
+  .cal-day.today .cal-day-num { color: var(--gold); font-weight: 600; }
+  .cal-event-dot {
+    display: block;
+    font-size: 0.62rem;
+    color: var(--green);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 1px 3px;
+    border-radius: 3px;
+    background: var(--green-pale);
+    margin-bottom: 2px;
+  }
+  .cal-event-dot.more {
+    color: var(--taupe);
+    background: none;
+    font-style: italic;
+  }
+
+  .tag-actions { display: flex; gap: 0.5rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <svg class="logo-bird" viewBox="0 0 60 30" fill="none">
+      <path d="M2 20 Q15 8 30 12 Q42 4 58 8" stroke="#C9A84C" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M28 12 Q32 18 38 15" stroke="#C9A84C" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <span class="logo-text">FLY UP</span>
+  </div>
+  <nav id="mainNav">
+    <button class="nav-btn active" onclick="goTo('dashboard')">Dashboard</button>
+    <button class="nav-btn" onclick="goTo('calendario')">Calendário</button>
+    <button class="nav-btn" onclick="goTo('registro')">Registrar</button>
+    <button class="nav-btn" onclick="goTo('historico')">Histórico</button>
+    <button class="nav-btn" onclick="goTo('servicos')">Serviços</button>
+    <button class="nav-btn" onclick="goTo('relatorio')">Relatório</button>
+  </nav>
+  <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+</header>
+
+<div class="mobile-nav" id="mobileNav">
+  <button class="nav-btn" onclick="goTo('dashboard');closeMobileNav()">Dashboard</button>
+  <button class="nav-btn" onclick="goTo('calendario');closeMobileNav()">Calendário</button>
+  <button class="nav-btn" onclick="goTo('registro');closeMobileNav()">Registrar</button>
+  <button class="nav-btn" onclick="goTo('historico');closeMobileNav()">Histórico</button>
+  <button class="nav-btn" onclick="goTo('servicos');closeMobileNav()">Serviços</button>
+  <button class="nav-btn" onclick="goTo('relatorio');closeMobileNav()">Relatório</button>
+</div>
+
+<main>
+
+  <!-- ═══ DASHBOARD ═══ -->
+  <div class="page active" id="page-dashboard">
+    <h1 class="page-title">Dashboard</h1>
+    <div class="divider"></div>
+
+    <div class="stats-grid" id="statsGrid"></div>
+
+    <div class="charts-grid">
+      <div class="card">
+        <div class="card-title">Receita por Tipo de Serviço</div>
+        <div class="chart-container"><canvas id="chartReceita"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-title">Atendimentos por Mês</div>
+        <div class="chart-container"><canvas id="chartMes"></canvas></div>
+      </div>
+    </div>
+
+    <div class="two-col-grid">
+      <div class="card">
+        <div class="card-title">🏆 Top Serviços por Receita</div>
+        <div id="topReceita"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">⏱ Melhor Aproveitamento de Tempo</div>
+        <div id="topTempo"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ REGISTRO ═══ -->
+  <div class="page" id="page-registro">
+    <h1 class="page-title">Registrar Atendimento</h1>
+    <p class="page-subtitle">Adicione um atendimento realizado — passado ou atual</p>
+    <div class="divider"></div>
+
+    <div class="card registro-form">
+      <div class="form-grid">
+        <div class="form-group">
+          <label>Tipo de Serviço</label>
+          <select id="regServico" onchange="preencherServico()">
+            <option value="">— selecione —</option>
+          </select>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date" id="regData">
+          </div>
+          <div class="form-group">
+            <label>Hora</label>
+            <input type="time" id="regHora">
+          </div>
+        </div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group">
+            <label>Valor Cobrado (R$)</label>
+            <input type="number" id="regValor" placeholder="0,00" step="0.01" min="0">
+          </div>
+          <div class="form-group">
+            <label>Duração (minutos)</label>
+            <input type="number" id="regDuracao" placeholder="60" min="1">
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Observações (opcional)</label>
+          <textarea id="regObs" placeholder="Notas sobre o atendimento..."></textarea>
+        </div>
+        <div class="flex-end gap-1 mt-2">
+          <button class="btn btn-ghost" onclick="limparRegistro()">Limpar</button>
+          <button class="btn btn-primary" onclick="salvarAtendimento()">✦ Salvar Atendimento</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ HISTÓRICO ═══ -->
+  <div class="page" id="page-historico">
+    <div class="flex-between mb-3">
+      <div>
+        <h1 class="page-title">Histórico</h1>
+        <p class="page-subtitle">Todos os atendimentos registrados</p>
+      </div>
+      <button class="btn btn-primary" onclick="goTo('registro')">+ Novo</button>
+    </div>
+
+    <div class="filter-bar">
+      <input type="text" id="filtroTexto" placeholder="Buscar serviço..." oninput="filtrarHistorico()" style="min-width:200px">
+      <select id="filtroServico" onchange="filtrarHistorico()">
+        <option value="">Todos os serviços</option>
+      </select>
+      <input type="month" id="filtroMes" onchange="filtrarHistorico()">
+      <button class="btn btn-ghost btn-sm" onclick="limparFiltros()">Limpar filtros</button>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table id="tabelaHistorico">
+          <thead>
+            <tr>
+              <th>Data / Hora</th>
+              <th>Serviço</th>
+              <th>Duração</th>
+              <th>Valor</th>
+              <th>R$/h</th>
+              <th>Obs.</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbodyHistorico"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SERVIÇOS ═══ -->
+  <div class="page" id="page-servicos">
+    <div class="flex-between mb-3">
+      <div>
+        <h1 class="page-title">Tipos de Serviço</h1>
+        <p class="page-subtitle">Gerencie seus serviços padrão</p>
+      </div>
+      <button class="btn btn-primary" onclick="abrirModalServico()">+ Novo Serviço</button>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nome</th>
+              <th>Duração Padrão</th>
+              <th>Valor Padrão</th>
+              <th>R$/hora</th>
+              <th>Atendimentos</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbodyServicos"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CALENDÁRIO ═══ -->
+  <div class="page" id="page-calendario">
+    <div class="flex-between mb-3" style="flex-wrap:wrap;gap:1rem">
+      <div>
+        <h1 class="page-title">Calendário</h1>
+        <p class="page-subtitle">Visão mensal dos atendimentos</p>
+      </div>
+      <div class="flex gap-2" style="align-items:center;flex-wrap:wrap">
+        <button class="btn btn-ghost btn-sm" onclick="calNav(-1)">← Anterior</button>
+        <span id="calLabel" style="font-family:'Cormorant Garamond',serif;font-size:1.1rem;color:var(--green);letter-spacing:.1em;min-width:160px;text-align:center"></span>
+        <button class="btn btn-ghost btn-sm" onclick="calNav(1)">Próximo →</button>
+      </div>
+    </div>
+    <div class="card" style="padding:1rem">
+      <div id="calGrid"></div>
+    </div>
+    <div class="card mt-2" id="calDayDetail" style="display:none">
+      <div class="card-title" id="calDayTitle"></div>
+      <div id="calDayList"></div>
+    </div>
+  </div>
+
+  <!-- ═══ RELATÓRIO ═══ -->
+  <div class="page" id="page-relatorio">
+    <h1 class="page-title">Relatório</h1>
+    <p class="page-subtitle">Visão analítica detalhada dos seus atendimentos</p>
+    <div class="divider"></div>
+
+    <div class="filter-bar mb-3">
+      <div class="form-group" style="flex-direction:row;align-items:center;gap:.5rem">
+        <label style="white-space:nowrap;margin:0">Período:</label>
+        <input type="date" id="relDataInicio" style="min-width:140px">
+        <span style="color:var(--taupe);font-size:.8rem">até</span>
+        <input type="date" id="relDataFim" style="min-width:140px">
+      </div>
+      <button class="btn btn-secondary" onclick="gerarRelatorio()">Gerar Relatório</button>
+      <button class="btn btn-ghost" onclick="exportarCSV()">↓ Exportar CSV</button>
+    </div>
+
+    <div id="relatorioConteudo"></div>
+  </div>
+
+</main>
+
+<!-- ═══ MODAL SERVIÇO ═══ -->
+<div class="modal-overlay" id="modalServico">
+  <div class="modal">
+    <div class="modal-title" id="modalServicoTitulo">Novo Serviço</div>
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Nome do Serviço</label>
+        <input type="text" id="mServNome" placeholder="Ex: Consulta, Sessão, Avaliação...">
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Duração Padrão (min)</label>
+          <input type="number" id="mServDuracao" placeholder="60" min="1">
+        </div>
+        <div class="form-group">
+          <label>Valor Padrão (R$)</label>
+          <input type="number" id="mServValor" placeholder="0,00" step="0.01" min="0">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Cor de Identificação</label>
+        <select id="mServCor">
+          <option value="badge-green">Verde</option>
+          <option value="badge-gold">Dourado</option>
+          <option value="badge-brown">Marrom</option>
+        </select>
+      </div>
+    </div>
+    <div class="flex-end gap-1 mt-3">
+      <button class="btn btn-ghost" onclick="fecharModal('modalServico')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarServico()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL EDITAR ATENDIMENTO ═══ -->
+<div class="modal-overlay" id="modalEditAten">
+  <div class="modal">
+    <div class="modal-title">Editar Atendimento</div>
+    <input type="hidden" id="editAtenId">
+    <div class="form-grid">
+      <div class="form-group">
+        <label>Tipo de Serviço</label>
+        <select id="editAtenServico"></select>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Data</label>
+          <input type="date" id="editAtenData">
+        </div>
+        <div class="form-group">
+          <label>Hora</label>
+          <input type="time" id="editAtenHora">
+        </div>
+      </div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group">
+          <label>Valor (R$)</label>
+          <input type="number" id="editAtenValor" step="0.01" min="0">
+        </div>
+        <div class="form-group">
+          <label>Duração (min)</label>
+          <input type="number" id="editAtenDuracao" min="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Observações</label>
+        <textarea id="editAtenObs"></textarea>
+      </div>
+    </div>
+    <div class="flex-end gap-1 mt-3">
+      <button class="btn btn-ghost" onclick="fecharModal('modalEditAten')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarEdicaoAtendimento()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════
+// DATA LAYER — localStorage
+// ═══════════════════════════════════════════
+const DB_SERVICOS   = 'flyup_servicos';
+const DB_ATENDIMENTOS = 'flyup_atendimentos';
+
+function loadData(key) {
+  try { return JSON.parse(localStorage.getItem(key)) || []; }
+  catch { return []; }
+}
+function saveData(key, data) {
+  localStorage.setItem(key, JSON.stringify(data));
+}
+
+function getServicos() { return loadData(DB_SERVICOS); }
+function getAtendimentos() { return loadData(DB_ATENDIMENTOS); }
+function setServicos(d) { saveData(DB_SERVICOS, d); }
+function setAtendimentos(d) { saveData(DB_ATENDIMENTOS, d); }
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2); }
+
+function toggleMobileNav() {
+  document.getElementById('mobileNav').classList.toggle('open');
+}
+function closeMobileNav() {
+  document.getElementById('mobileNav').classList.remove('open');
+}
+
+// close mobile nav on outside click
+document.addEventListener('click', e => {
+  const nav = document.getElementById('mobileNav');
+  const btn = document.getElementById('hamburgerBtn');
+  if (nav.classList.contains('open') && !nav.contains(e.target) && !btn.contains(e.target)) {
+    nav.classList.remove('open');
+  }
+});
+
+// ═══════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════
+let currentPage = 'dashboard';
+let chartReceita, chartMes;
+
+function goTo(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('page-' + page).classList.add('active');
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'" + page + "'")) b.classList.add('active');
+  });
+  currentPage = page;
+  if (page === 'dashboard') renderDashboard();
+  if (page === 'historico') renderHistorico();
+  if (page === 'servicos') renderServicos();
+  if (page === 'registro') initRegistro();
+  if (page === 'relatorio') initRelatorio();
+  if (page === 'calendario') renderCalendario();
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+// ═══════════════════════════════════════════
+// TOAST
+// ═══════════════════════════════════════════
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+
+// ═══════════════════════════════════════════
+// MODALS
+// ═══════════════════════════════════════════
+function fecharModal(id) { document.getElementById(id).classList.remove('open'); }
+function abrirModal(id) { document.getElementById(id).classList.add('open'); }
+
+// ═══════════════════════════════════════════
+// SERVIÇOS
+// ═══════════════════════════════════════════
+let editingServicoId = null;
+
+function renderServicos() {
+  const servicos = getServicos();
+  const atendimentos = getAtendimentos();
+  const tbody = document.getElementById('tbodyServicos');
+  if (!servicos.length) {
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum serviço cadastrado ainda.</p></div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = servicos.map(s => {
+    const count = atendimentos.filter(a => a.servicoId === s.id).length;
+    const rph = s.duracao ? ((s.valor / s.duracao) * 60).toFixed(2) : '—';
+    return `<tr>
+      <td><span class="badge ${s.cor || 'badge-green'}">${s.nome}</span></td>
+      <td>${s.duracao} min</td>
+      <td>R$ ${Number(s.valor).toFixed(2)}</td>
+      <td>R$ ${rph}/h</td>
+      <td>${count}</td>
+      <td class="tag-actions">
+        <button class="btn btn-ghost btn-sm" onclick="editarServico('${s.id}')">Editar</button>
+        <button class="btn btn-danger" onclick="excluirServico('${s.id}')">Excluir</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function abrirModalServico(id) {
+  editingServicoId = id || null;
+  document.getElementById('modalServicoTitulo').textContent = id ? 'Editar Serviço' : 'Novo Serviço';
+  if (id) {
+    const s = getServicos().find(x => x.id === id);
+    document.getElementById('mServNome').value = s.nome;
+    document.getElementById('mServDuracao').value = s.duracao;
+    document.getElementById('mServValor').value = s.valor;
+    document.getElementById('mServCor').value = s.cor || 'badge-green';
+  } else {
+    document.getElementById('mServNome').value = '';
+    document.getElementById('mServDuracao').value = '';
+    document.getElementById('mServValor').value = '';
+    document.getElementById('mServCor').value = 'badge-green';
+  }
+  abrirModal('modalServico');
+}
+
+function editarServico(id) { abrirModalServico(id); }
+
+function salvarServico() {
+  const nome = document.getElementById('mServNome').value.trim();
+  const duracao = parseInt(document.getElementById('mServDuracao').value);
+  const valor = parseFloat(document.getElementById('mServValor').value);
+  const cor = document.getElementById('mServCor').value;
+  if (!nome || !duracao || isNaN(valor)) { toast('Preencha todos os campos.'); return; }
+  const servicos = getServicos();
+  if (editingServicoId) {
+    const idx = servicos.findIndex(s => s.id === editingServicoId);
+    servicos[idx] = { ...servicos[idx], nome, duracao, valor, cor };
+  } else {
+    servicos.push({ id: uid(), nome, duracao, valor, cor });
+  }
+  setServicos(servicos);
+  fecharModal('modalServico');
+  renderServicos();
+  populateServicoSelects();
+  toast(editingServicoId ? 'Serviço atualizado.' : 'Serviço criado!');
+}
+
+function excluirServico(id) {
+  if (!confirm('Excluir este serviço? Os atendimentos não serão removidos.')) return;
+  setServicos(getServicos().filter(s => s.id !== id));
+  renderServicos();
+  populateServicoSelects();
+  toast('Serviço removido.');
+}
+
+// ═══════════════════════════════════════════
+// REGISTRO
+// ═══════════════════════════════════════════
+function initRegistro() {
+  populateServicoSelects();
+  const today = new Date().toISOString().split('T')[0];
+  const now = new Date().toTimeString().slice(0,5);
+  if (!document.getElementById('regData').value) document.getElementById('regData').value = today;
+  if (!document.getElementById('regHora').value) document.getElementById('regHora').value = now;
+}
+
+function populateServicoSelects() {
+  const servicos = getServicos();
+  const selects = ['regServico', 'filtroServico', 'editAtenServico'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isReg = id === 'regServico';
+    const isFilt = id === 'filtroServico';
+    el.innerHTML = (isReg ? '<option value="">— selecione —</option>' : '<option value="">Todos</option>') +
+      servicos.map(s => `<option value="${s.id}">${s.nome}</option>`).join('');
+  });
+}
+
+function preencherServico() {
+  const id = document.getElementById('regServico').value;
+  const s = getServicos().find(x => x.id === id);
+  if (s) {
+    document.getElementById('regValor').value = s.valor;
+    document.getElementById('regDuracao').value = s.duracao;
+  }
+}
+
+function salvarAtendimento() {
+  const servicoId = document.getElementById('regServico').value;
+  const data = document.getElementById('regData').value;
+  const hora = document.getElementById('regHora').value;
+  const valor = parseFloat(document.getElementById('regValor').value);
+  const duracao = parseInt(document.getElementById('regDuracao').value);
+  const obs = document.getElementById('regObs').value.trim();
+  if (!servicoId || !data || !hora || isNaN(valor) || isNaN(duracao)) {
+    toast('Preencha todos os campos obrigatórios.'); return;
+  }
+  const atendimentos = getAtendimentos();
+  atendimentos.push({ id: uid(), servicoId, data, hora, valor, duracao, obs });
+  setAtendimentos(atendimentos);
+  limparRegistro();
+  toast('✦ Atendimento registrado!');
+  goTo('historico');
+}
+
+function limparRegistro() {
+  document.getElementById('regServico').value = '';
+  document.getElementById('regValor').value = '';
+  document.getElementById('regDuracao').value = '';
+  document.getElementById('regObs').value = '';
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('regData').value = today;
+  document.getElementById('regHora').value = new Date().toTimeString().slice(0,5);
+}
+
+// ═══════════════════════════════════════════
+// HISTÓRICO
+// ═══════════════════════════════════════════
+function renderHistorico(filtros) {
+  populateServicoSelects();
+  let atendimentos = getAtendimentos();
+  const servicos = getServicos();
+
+  // apply filters
+  const txt = document.getElementById('filtroTexto')?.value?.toLowerCase() || '';
+  const sId = document.getElementById('filtroServico')?.value || '';
+  const mes = document.getElementById('filtroMes')?.value || '';
+
+  atendimentos = atendimentos.filter(a => {
+    const s = servicos.find(x => x.id === a.servicoId);
+    const nome = s ? s.nome.toLowerCase() : '';
+    if (txt && !nome.includes(txt)) return false;
+    if (sId && a.servicoId !== sId) return false;
+    if (mes && !a.data.startsWith(mes)) return false;
+    return true;
+  });
+
+  // sort by date desc
+  atendimentos.sort((a, b) => (b.data + b.hora).localeCompare(a.data + a.hora));
+
+  const tbody = document.getElementById('tbodyHistorico');
+  if (!atendimentos.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum atendimento encontrado.</p></div></td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = atendimentos.map(a => {
+    const s = servicos.find(x => x.id === a.servicoId);
+    const rph = a.duracao ? (a.valor / a.duracao * 60).toFixed(0) : '—';
+    const dataFmt = a.data ? new Date(a.data + 'T12:00').toLocaleDateString('pt-BR') : '—';
+    return `<tr>
+      <td style="font-size:.82rem;color:var(--taupe)">${dataFmt}<br><span style="font-weight:500;color:var(--text)">${a.hora || ''}</span></td>
+      <td><span class="badge ${s?.cor || 'badge-green'}">${s?.nome || '—'}</span></td>
+      <td>${a.duracao} min</td>
+      <td style="font-weight:600;color:var(--green)">R$ ${Number(a.valor).toFixed(2)}</td>
+      <td style="color:var(--taupe);font-size:.82rem">R$ ${rph}/h</td>
+      <td style="font-size:.78rem;color:var(--taupe);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${a.obs || ''}</td>
+      <td class="tag-actions">
+        <button class="btn btn-ghost btn-sm" onclick="abrirEditarAtendimento('${a.id}')">Editar</button>
+        <button class="btn btn-danger" onclick="excluirAtendimento('${a.id}')">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filtrarHistorico() { renderHistorico(); }
+
+function limparFiltros() {
+  document.getElementById('filtroTexto').value = '';
+  document.getElementById('filtroServico').value = '';
+  document.getElementById('filtroMes').value = '';
+  renderHistorico();
+}
+
+function excluirAtendimento(id) {
+  if (!confirm('Excluir este atendimento?')) return;
+  setAtendimentos(getAtendimentos().filter(a => a.id !== id));
+  renderHistorico();
+  toast('Atendimento removido.');
+}
+
+function abrirEditarAtendimento(id) {
+  const a = getAtendimentos().find(x => x.id === id);
+  if (!a) return;
+  const servicos = getServicos();
+  const sel = document.getElementById('editAtenServico');
+  sel.innerHTML = servicos.map(s => `<option value="${s.id}" ${s.id===a.servicoId?'selected':''}>${s.nome}</option>`).join('');
+  document.getElementById('editAtenId').value = a.id;
+  document.getElementById('editAtenData').value = a.data;
+  document.getElementById('editAtenHora').value = a.hora;
+  document.getElementById('editAtenValor').value = a.valor;
+  document.getElementById('editAtenDuracao').value = a.duracao;
+  document.getElementById('editAtenObs').value = a.obs || '';
+  abrirModal('modalEditAten');
+}
+
+function salvarEdicaoAtendimento() {
+  const id = document.getElementById('editAtenId').value;
+  const data = {
+    servicoId: document.getElementById('editAtenServico').value,
+    data: document.getElementById('editAtenData').value,
+    hora: document.getElementById('editAtenHora').value,
+    valor: parseFloat(document.getElementById('editAtenValor').value),
+    duracao: parseInt(document.getElementById('editAtenDuracao').value),
+    obs: document.getElementById('editAtenObs').value,
+  };
+  const lista = getAtendimentos();
+  const idx = lista.findIndex(a => a.id === id);
+  if (idx < 0) return;
+  lista[idx] = { ...lista[idx], ...data };
+  setAtendimentos(lista);
+  fecharModal('modalEditAten');
+  renderHistorico();
+  toast('Atendimento atualizado.');
+}
+
+// ═══════════════════════════════════════════
+// DASHBOARD
+// ═══════════════════════════════════════════
+function renderDashboard() {
+  const atendimentos = getAtendimentos();
+  const servicos = getServicos();
+
+  const totalAten = atendimentos.length;
+  const totalReceita = atendimentos.reduce((s, a) => s + (a.valor || 0), 0);
+  const totalMin = atendimentos.reduce((s, a) => s + (a.duracao || 0), 0);
+  const ticketMedio = totalAten ? (totalReceita / totalAten) : 0;
+  const rphGlobal = totalMin ? (totalReceita / totalMin * 60) : 0;
+
+  const now = new Date();
+  const mesAtual = now.toISOString().slice(0,7);
+  const atenMes = atendimentos.filter(a => a.data?.startsWith(mesAtual));
+  const receitaMes = atenMes.reduce((s, a) => s + (a.valor||0), 0);
+
+  document.getElementById('statsGrid').innerHTML = `
+    <div class="stat-card">
+      <div class="stat-label">Total de Atendimentos</div>
+      <div class="stat-value">${totalAten}</div>
+      <div class="stat-sub">${atenMes.length} este mês</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Receita Total</div>
+      <div class="stat-value">R$${totalReceita.toLocaleString('pt-BR',{minimumFractionDigits:0,maximumFractionDigits:0})}</div>
+      <div class="stat-sub">R$ ${receitaMes.toFixed(0)} este mês</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ticket Médio</div>
+      <div class="stat-value">R$${ticketMedio.toFixed(0)}</div>
+      <div class="stat-sub">por atendimento</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Horas de Atendimento</div>
+      <div class="stat-value">${(totalMin/60).toFixed(1)}h</div>
+      <div class="stat-sub">R$ ${rphGlobal.toFixed(0)}/hora média</div>
+    </div>
+  `;
+
+  // group by service
+  const byServ = {};
+  atendimentos.forEach(a => {
+    if (!byServ[a.servicoId]) byServ[a.servicoId] = { receita: 0, count: 0, minutos: 0 };
+    byServ[a.servicoId].receita += a.valor || 0;
+    byServ[a.servicoId].count++;
+    byServ[a.servicoId].minutos += a.duracao || 0;
+  });
+
+  const servNomes = Object.keys(byServ).map(id => {
+    const s = servicos.find(x => x.id === id);
+    return { id, nome: s?.nome || 'Desconhecido', ...byServ[id], rph: byServ[id].minutos ? byServ[id].receita / byServ[id].minutos * 60 : 0 };
+  });
+
+  // chart receita por tipo
+  const topServ = [...servNomes].sort((a,b) => b.receita - a.receita).slice(0, 6);
+  if (chartReceita) chartReceita.destroy();
+  chartReceita = new Chart(document.getElementById('chartReceita'), {
+    type: 'doughnut',
+    data: {
+      labels: topServ.map(s => s.nome),
+      datasets: [{ data: topServ.map(s => s.receita),
+        backgroundColor: ['#C9A84C','#647746','#776b5f','#504840','#E2C97E','#8FA46A'],
+        borderWidth: 0 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { font: { family:'Jost', size:11 }, color:'#776b5f', padding: 12 } } } }
+  });
+
+  // chart atendimentos por mês
+  const byMes = {};
+  atendimentos.forEach(a => {
+    const m = a.data?.slice(0,7);
+    if (m) byMes[m] = (byMes[m]||0) + 1;
+  });
+  const meses = Object.keys(byMes).sort().slice(-6);
+  if (chartMes) chartMes.destroy();
+  chartMes = new Chart(document.getElementById('chartMes'), {
+    type: 'bar',
+    data: {
+      labels: meses.map(m => { const [y,mo] = m.split('-'); return new Date(y, mo-1).toLocaleString('pt-BR',{month:'short',year:'2-digit'}); }),
+      datasets: [{ data: meses.map(m => byMes[m]),
+        backgroundColor: 'rgba(100,119,70,0.7)', borderRadius: 6, borderSkipped: false }]
+    },
+    options: { responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { family:'Jost', size:11 }, color:'#776b5f' } },
+        y: { grid: { color:'rgba(226,217,204,0.4)' }, ticks: { font: { family:'Jost', size:11 }, color:'#776b5f' } }
+      }
+    }
+  });
+
+  // top receita
+  const topR = [...servNomes].sort((a,b) => b.receita - a.receita).slice(0,5);
+  document.getElementById('topReceita').innerHTML = topR.length ? topR.map((s,i) => `
+    <div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-info">
+        <div class="rank-name">${s.nome}</div>
+        <div class="rank-sub">${s.count} atendimentos · ${(s.minutos/60).toFixed(1)}h</div>
+      </div>
+      <div class="rank-val">R$ ${s.receita.toFixed(0)}</div>
+    </div>`).join('') : '<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>';
+
+  // top aproveitamento tempo (R$/h)
+  const topT = [...servNomes].filter(s => s.minutos > 0).sort((a,b) => b.rph - a.rph).slice(0,5);
+  document.getElementById('topTempo').innerHTML = topT.length ? topT.map((s,i) => `
+    <div class="rank-item">
+      <div class="rank-num">${i+1}</div>
+      <div class="rank-info">
+        <div class="rank-name">${s.nome}</div>
+        <div class="rank-sub">${s.count} atend. · ${(s.minutos/60).toFixed(1)}h total</div>
+      </div>
+      <div class="rank-val">R$ ${s.rph.toFixed(0)}/h</div>
+    </div>`).join('') : '<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>';
+}
+
+// ═══════════════════════════════════════════
+// RELATÓRIO
+// ═══════════════════════════════════════════
+function initRelatorio() {
+  const now = new Date();
+  if (!document.getElementById('relDataInicio').value) {
+    document.getElementById('relDataInicio').value = now.toISOString().slice(0,8) + '01';
+  }
+  if (!document.getElementById('relDataFim').value) {
+    document.getElementById('relDataFim').value = now.toISOString().slice(0,10);
+  }
+  gerarRelatorio();
+}
+
+function gerarRelatorio() {
+  const inicio = document.getElementById('relDataInicio').value;
+  const fim = document.getElementById('relDataFim').value;
+  let atendimentos = getAtendimentos();
+  const servicos = getServicos();
+
+  if (inicio) atendimentos = atendimentos.filter(a => a.data >= inicio);
+  if (fim) atendimentos = atendimentos.filter(a => a.data <= fim);
+
+  const totalReceita = atendimentos.reduce((s,a) => s + (a.valor||0), 0);
+  const totalMin = atendimentos.reduce((s,a) => s + (a.duracao||0), 0);
+  const ticket = atendimentos.length ? totalReceita / atendimentos.length : 0;
+  const rph = totalMin ? totalReceita / totalMin * 60 : 0;
+
+  const byServ = {};
+  atendimentos.forEach(a => {
+    if (!byServ[a.servicoId]) byServ[a.servicoId] = { receita:0, count:0, minutos:0 };
+    byServ[a.servicoId].receita += a.valor || 0;
+    byServ[a.servicoId].count++;
+    byServ[a.servicoId].minutos += a.duracao || 0;
+  });
+
+  const rows = Object.keys(byServ).map(id => {
+    const s = servicos.find(x => x.id === id);
+    const d = byServ[id];
+    return { nome: s?.nome||'—', ...d, rph: d.minutos ? d.receita/d.minutos*60 : 0, pct: totalReceita ? (d.receita/totalReceita*100).toFixed(1) : '0' };
+  }).sort((a,b) => b.receita - a.receita);
+
+  document.getElementById('relatorioConteudo').innerHTML = `
+    <div class="stats-grid" style="margin-bottom:1.5rem">
+      <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atendimentos.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value">R$${totalReceita.toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+      <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">R$${ticket.toFixed(2)}</div></div>
+      <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">R$${rph.toFixed(0)}/h média</div></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Desempenho por Serviço</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Serviço</th><th>Qtd</th><th>Receita</th><th>% Receita</th><th>Tempo Total</th><th>R$/hora</th><th>Ticket Médio</th></tr></thead>
+          <tbody>
+            ${rows.map(r => `<tr>
+              <td><strong>${r.nome}</strong></td>
+              <td>${r.count}</td>
+              <td>R$ ${r.receita.toFixed(2)}</td>
+              <td><div style="display:flex;align-items:center;gap:.5rem">
+                <div style="width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+                  <div style="width:${r.pct}%;height:100%;background:var(--gold);border-radius:3px"></div>
+                </div>
+                ${r.pct}%
+              </div></td>
+              <td>${(r.minutos/60).toFixed(1)}h</td>
+              <td>R$ ${r.rph.toFixed(0)}</td>
+              <td>R$ ${r.count ? (r.receita/r.count).toFixed(2) : '—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function exportarCSV() {
+  const inicio = document.getElementById('relDataInicio').value;
+  const fim = document.getElementById('relDataFim').value;
+  let atendimentos = getAtendimentos();
+  const servicos = getServicos();
+  if (inicio) atendimentos = atendimentos.filter(a => a.data >= inicio);
+  if (fim) atendimentos = atendimentos.filter(a => a.data <= fim);
+  atendimentos.sort((a,b) => a.data.localeCompare(b.data));
+
+  const lines = ['Data,Hora,Servico,Duracao(min),Valor(R$),Obs'];
+  atendimentos.forEach(a => {
+    const s = servicos.find(x => x.id === a.servicoId);
+    lines.push(`${a.data},${a.hora},"${s?.nome||''}",${a.duracao},${a.valor},"${(a.obs||'').replace(/"/g,"''")}"`);
+  });
+
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `flyup_atendimentos_${inicio || 'todos'}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+  toast('CSV exportado!');
+}
+
+// ═══════════════════════════════════════════
+// CALENDÁRIO
+// ═══════════════════════════════════════════
+let calYear, calMonth;
+
+function renderCalendario() {
+  const now = new Date();
+  if (!calYear) calYear = now.getFullYear();
+  if (calMonth === undefined) calMonth = now.getMonth();
+
+  const servicos = getServicos();
+  const atendimentos = getAtendimentos();
+
+  const monthNames = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  document.getElementById('calLabel').textContent = `${monthNames[calMonth]} ${calYear}`;
+
+  // Build day grid
+  const firstDay = new Date(calYear, calMonth, 1);
+  const lastDay = new Date(calYear, calMonth + 1, 0);
+  const startDow = firstDay.getDay(); // 0=sun
+  const daysInMonth = lastDay.getDate();
+  const todayStr = now.toISOString().slice(0,10);
+
+  // Group atendimentos by date
+  const byDate = {};
+  atendimentos.forEach(a => {
+    if (!byDate[a.data]) byDate[a.data] = [];
+    byDate[a.data].push(a);
+  });
+
+  const weekDays = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+  let html = `<div class="cal-weekdays">${weekDays.map(d=>`<div class="cal-weekday">${d}</div>`).join('')}</div>`;
+  html += '<div class="cal-days">';
+
+  // Prev month padding
+  for (let i = 0; i < startDow; i++) {
+    const d = new Date(calYear, calMonth, -startDow + i + 1);
+    html += `<div class="cal-day other-month"><div class="cal-day-num">${d.getDate()}</div></div>`;
+  }
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const events = byDate[dateStr] || [];
+    const isToday = dateStr === todayStr;
+    const hasEv = events.length > 0;
+    let cls = 'cal-day';
+    if (isToday) cls += ' today';
+    if (hasEv) cls += ' has-events';
+
+    let evHtml = '';
+    events.slice(0,3).forEach(a => {
+      const s = servicos.find(x => x.id === a.servicoId);
+      evHtml += `<span class="cal-event-dot">${s?.nome || '—'}</span>`;
+    });
+    if (events.length > 3) evHtml += `<span class="cal-event-dot more">+${events.length - 3} mais</span>`;
+
+    html += `<div class="${cls}" onclick="calSelectDay('${dateStr}')">
+      <div class="cal-day-num">${d}</div>
+      ${evHtml}
+    </div>`;
+  }
+
+  // Next month padding
+  const totalCells = startDow + daysInMonth;
+  const remainder = totalCells % 7;
+  if (remainder > 0) {
+    for (let i = 1; i <= 7 - remainder; i++) {
+      html += `<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
+    }
+  }
+
+  html += '</div>';
+  document.getElementById('calGrid').innerHTML = html;
+  document.getElementById('calDayDetail').style.display = 'none';
+}
+
+function calNav(dir) {
+  calMonth += dir;
+  if (calMonth > 11) { calMonth = 0; calYear++; }
+  if (calMonth < 0) { calMonth = 11; calYear--; }
+  renderCalendario();
+}
+
+function calSelectDay(dateStr) {
+  const servicos = getServicos();
+  const atendimentos = getAtendimentos().filter(a => a.data === dateStr);
+  const detail = document.getElementById('calDayDetail');
+  if (!atendimentos.length) { detail.style.display = 'none'; return; }
+
+  const [y,m,d] = dateStr.split('-');
+  const dt = new Date(y, m-1, d);
+  document.getElementById('calDayTitle').textContent = dt.toLocaleDateString('pt-BR', { weekday:'long', day:'numeric', month:'long' });
+
+  const list = atendimentos.map(a => {
+    const s = servicos.find(x => x.id === a.servicoId);
+    const rph = a.duracao ? (a.valor / a.duracao * 60).toFixed(0) : '—';
+    return `<div class="rank-item">
+      <div class="rank-info">
+        <div class="rank-name">${s?.nome || '—'} <span style="font-size:.75rem;color:var(--taupe)">${a.hora || ''}</span></div>
+        <div class="rank-sub">${a.duracao} min · R$ ${rph}/h${a.obs ? ' · ' + a.obs : ''}</div>
+      </div>
+      <div class="rank-val">R$ ${Number(a.valor).toFixed(2)}</div>
+    </div>`;
+  }).join('');
+
+  const total = atendimentos.reduce((s,a) => s + (a.valor||0), 0);
+  document.getElementById('calDayList').innerHTML = list + `<div style="text-align:right;margin-top:.75rem;font-size:.85rem;font-weight:600;color:var(--green)">Total do dia: R$ ${total.toFixed(2)}</div>`;
+  detail.style.display = 'block';
+  detail.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ═══════════════════════════════════════════
+// SEED DE EXEMPLO (se não tiver dados)
+// ═══════════════════════════════════════════
+function seedData() {
+  if (getServicos().length) return;
+  const servicos = [
+    // Janaina Assad
+    { id: 'ja01', nome: 'Direcionamento Baralho Cigano', duracao: 60, valor: 165, cor: 'badge-gold' },
+    { id: 'ja02', nome: 'Apometria (Janaina)', duracao: 60, valor: 185, cor: 'badge-gold' },
+    { id: 'ja03', nome: 'Barras de Access', duracao: 60, valor: 185, cor: 'badge-gold' },
+    { id: 'ja04', nome: 'Reiki Universal e de Limpeza', duracao: 60, valor: 185, cor: 'badge-gold' },
+    { id: 'ja05', nome: 'Alinhamento Neuro Energético', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja06', nome: 'Ativação Kundalini', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja07', nome: 'Divórcio Energético', duracao: 60, valor: 185, cor: 'badge-gold' },
+    { id: 'ja08', nome: 'Leitura de Registro Akáshicos', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja09', nome: 'Mesa Radionica Cigana', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja10', nome: 'Mesa Radiônica Apometrica', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja11', nome: 'Mesa Radionica / Radiestesia', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja12', nome: 'Balão Gástrico (Hipnose)', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja13', nome: 'Renascimento', duracao: 60, valor: 200, cor: 'badge-gold' },
+    { id: 'ja14', nome: 'Mesa Radionica Divórcio Energético', duracao: 60, valor: 200, cor: 'badge-gold' },
+    // Luiz Assad
+    { id: 'la01', nome: 'Constelação F. (particular) bonecos', duracao: 90, valor: 230, cor: 'badge-green' },
+    { id: 'la02', nome: 'Constelação Familiar em grupo', duracao: 90, valor: 230, cor: 'badge-green' },
+    { id: 'la03', nome: 'Hipnose (TOC, Fobias, Traumas...)', duracao: 60, valor: 200, cor: 'badge-green' },
+    { id: 'la04', nome: 'Acupuntura', duracao: 45, valor: 130, cor: 'badge-green' },
+    { id: 'la05', nome: 'Eletrochoque para traumas físicos', duracao: 45, valor: 150, cor: 'badge-green' },
+    { id: 'la06', nome: 'Aurícula', duracao: 45, valor: 130, cor: 'badge-green' },
+    { id: 'la07', nome: 'Apometria (Luiz)', duracao: 60, valor: 185, cor: 'badge-green' },
+    { id: 'la08', nome: 'Reiki (Luiz)', duracao: 60, valor: 185, cor: 'badge-green' },
+    // Velas / Extras
+    { id: 'vl01', nome: 'Vela de Mel - Adoçamento', duracao: 30, valor: 40, cor: 'badge-brown' },
+    { id: 'vl02', nome: 'Divórcio Energético com Velas', duracao: 30, valor: 60, cor: 'badge-brown' },
+    { id: 'vl03', nome: 'Guardia da Cura', duracao: 30, valor: 60, cor: 'badge-brown' },
+    { id: 'vl04', nome: 'Vela Especial (personalizado)', duracao: 30, valor: 0, cor: 'badge-brown' },
+    { id: 'vl05', nome: 'Vela de Limpeza', duracao: 30, valor: 30, cor: 'badge-brown' },
+  ];
+  setServicos(servicos);
+}
+
+// ═══════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════
+seedData();
+populateServicoSelects();
+initRegistro();
+renderDashboard();
+
+// fechar modais ao clicar fora
+document.querySelectorAll('.modal-overlay').forEach(m => {
+  m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); });
+});
+</script>
+</body>
+</html>
