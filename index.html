@@ -283,7 +283,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
   <div class="card">
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Duração</th><th>Participantes</th><th>Receita</th><th>Pagamento</th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Duração</th><th>Participantes</th><th>Receita</th><th>Pagamento</th><th>Parcelas</th><th></th></tr></thead>
         <tbody id="tbodyEventos"></tbody>
       </table>
     </div>
@@ -442,17 +442,39 @@ tr:hover td{background:rgba(245,237,214,.2);}
       <div class="form-group">
         <label>Pagamento</label>
         <div class="seg-group" id="segEvPag">
-          <button type="button" class="seg-btn" data-val="pix" onclick="setSeg('segEvPag','pix')">💠 PIX</button>
-          <button type="button" class="seg-btn" data-val="cartao" onclick="setSeg('segEvPag','cartao')">💳 Cartão</button>
-          <button type="button" class="seg-btn" data-val="dinheiro" onclick="setSeg('segEvPag','dinheiro')">💵 Dinheiro</button>
-          <button type="button" class="seg-btn" data-val="troca" onclick="setSeg('segEvPag','troca')">🤝 Troca</button>
+          <button type="button" class="seg-btn" data-val="pix" onclick="setSeg('segEvPag','pix');toggleEvParcelamento()">💠 PIX</button>
+          <button type="button" class="seg-btn" data-val="cartao" onclick="setSeg('segEvPag','cartao');toggleEvParcelamento()">💳 Cartão</button>
+          <button type="button" class="seg-btn" data-val="dinheiro" onclick="setSeg('segEvPag','dinheiro');toggleEvParcelamento()">💵 Dinheiro</button>
+          <button type="button" class="seg-btn" data-val="parcelado" onclick="setSeg('segEvPag','parcelado');toggleEvParcelamento()">📆 Parcelado</button>
+          <button type="button" class="seg-btn" data-val="troca" onclick="setSeg('segEvPag','troca');toggleEvParcelamento()">🤝 Troca</button>
         </div>
+      </div>
+      <!-- Parcelamento em dinheiro -->
+      <div id="evParcelamentoArea" style="display:none;background:var(--gold-pale);border:1px solid rgba(201,168,76,.3);border-radius:8px;padding:1rem;">
+        <div class="section-lbl" style="color:var(--brown);margin-bottom:.75rem;">💵 Parcelamento em Dinheiro</div>
+        <div class="form-grid form-grid-2">
+          <div class="form-group"><label>Nº de Parcelas</label><input type="number" id="evNumParcelas" min="2" max="24" placeholder="Ex: 3" oninput="gerarParcelasPreview()"></div>
+          <div class="form-group"><label>Valor Total (R$)</label><input type="number" id="evTotalParcelas" step="0.01" min="0" placeholder="0,00" oninput="gerarParcelasPreview()"></div>
+        </div>
+        <div id="evParcelasPreview" style="margin-top:.5rem;font-size:.8rem;color:var(--taupe);"></div>
       </div>
       <div class="form-group"><label>Obs.</label><textarea id="evObs"></textarea></div>
     </div>
     <div class="flex-end gap-1 mt-3">
       <button class="btn btn-ghost" onclick="fecharModal('modalEvento')">Cancelar</button>
       <button class="btn btn-primary" onclick="salvarEvento()">✦ Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PARCELAS EVENTO -->
+<div class="modal-overlay" id="modalParcelas">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-title" id="modalParcelasTitulo">Parcelas</div>
+    <div id="modalParcelasConteudo"></div>
+    <div class="flex-end gap-1 mt-3">
+      <button class="btn btn-ghost" onclick="fecharModal('modalParcelas')">Fechar</button>
+      <button class="btn btn-primary" onclick="salvarParcelas()">💾 Salvar</button>
     </div>
   </div>
 </div>
@@ -653,7 +675,7 @@ const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractio
 const fmtDate = s => { if(!s) return '—'; const [y,m,d]=s.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('pt-BR'); };
 
 function payBadge(p) {
-  const map = { pix:['pay-pix','💠 PIX'], cartao:['pay-cartao','💳 Cartão'], dinheiro:['pay-dinheiro','💵 Dinheiro'], troca:['pay-troca','🤝 Troca'] };
+  const map = { pix:['pay-pix','💠 PIX'], cartao:['pay-cartao','💳 Cartão'], dinheiro:['pay-dinheiro','💵 Dinheiro'], troca:['pay-troca','🤝 Troca'], parcelado:['badge-gold','📆 Parcelado'] };
   const v = map[p]; return v ? `<span class="badge ${v[0]}">${v[1]}</span>` : '';
 }
 function modBadge(m) {
@@ -724,7 +746,8 @@ async function salvarServico() {
   const nome=document.getElementById('mServNome').value.trim(), duracao=+document.getElementById('mServDuracao').value, valor=+document.getElementById('mServValor').value, cor=document.getElementById('mServCor').value;
   if (!nome||!duracao||isNaN(valor)) { toast('Preencha todos os campos.',false); return; }
   showLoading();
-  await dbSave('servicos', {id:editingServicoId||undefined, nome, duracao, valor, cor});
+  const itemServ = editingServicoId ? {id:editingServicoId, nome, duracao, valor, cor} : {nome, duracao, valor, cor};
+  await dbSave('servicos', itemServ);
   hideLoading(); fecharModal('modalServico'); renderServicos(); populateServicoSelects();
   toast(editingServicoId?'Serviço atualizado.':'Serviço criado!');
 }
@@ -860,7 +883,9 @@ async function salvarEdicaoAtendimento() {
 
 // ── EVENTOS ──
 function abrirModalEvento() {
-  ['evNome','evDuracao','evValorPessoa','evParticipantes','evValorConstelado','evParticipantesConste','evObs'].forEach(id=>document.getElementById(id).value='');
+  ['evNome','evDuracao','evValorPessoa','evParticipantes','evValorConstelado','evParticipantesConste','evObs','evNumParcelas','evTotalParcelas'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('evParcelamentoArea').style.display='none';
+  document.getElementById('evParcelasPreview').textContent='';
   document.getElementById('evData').value=new Date().toISOString().split('T')[0];
   document.getElementById('evTotalDisplay').textContent='R$ 0,00';
   ['segEvTipo','segEvPag'].forEach(g=>document.querySelectorAll('#'+g+' .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple')));
@@ -887,7 +912,15 @@ async function salvarEvento() {
   let total=0, participantes=0, valorConstelado=0, valorPessoa=0;
   if(tipo==='constelacao') { valorConstelado=+document.getElementById('evValorConstelado').value||0; participantes=+document.getElementById('evParticipantesConste').value||0; total=valorConstelado+participantes*20; }
   else { valorPessoa=+document.getElementById('evValorPessoa').value||0; participantes=+document.getElementById('evParticipantes').value||0; total=valorPessoa*participantes; }
-  showLoading(); await dbSave('eventos',{tipo,nome,data,duracao,participantes,valorConstelado,valorPessoa,total,pagamento:pag,obs}); hideLoading();
+  let parcelas=null;
+  if(pag==='parcelado'){
+    const np=+document.getElementById('evNumParcelas').value||0,vtp=+document.getElementById('evTotalParcelas').value||0;
+    if(np>=2&&vtp>0){
+      const valorParcela=vtp/np;
+      parcelas=Array.from({length:np},(_,i)=>({num:i+1,valor:valorParcela,pago:false,dataPagamento:''}));
+    }
+  }
+  showLoading(); await dbSave('eventos',{tipo,nome,data,duracao,participantes,valorConstelado,valorPessoa,total,pagamento:pag,obs,parcelas}); hideLoading();
   fecharModal('modalEvento'); renderEventos(); toast('Evento registrado!');
 }
 async function renderEventos() {
@@ -903,6 +936,7 @@ async function renderEventos() {
     <td style="font-size:.82rem;">${e.participantes||0} pessoas${e.tipo==='constelacao'?`<br><small style="color:var(--taupe);">Constelado: ${fmtBRL(e.valorConstelado)}</small>`:''}</td>
     <td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td>
     <td>${payBadge(e.pagamento)}</td>
+    <td>${e.parcelas&&e.parcelas.length?`<button class="btn btn-ghost btn-sm" onclick="abrirModalParcelas('${e.id}')">${parcelaBadge(e.parcelas)}</button>`:'<span style="color:var(--taupe);font-size:.75rem;">—</span>'}</td>
     <td><button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button></td>
   </tr>`).join('');
 }
@@ -920,7 +954,8 @@ function abrirModalProduto(id){
 async function salvarProduto(){
   const nome=document.getElementById('mProdNome').value.trim();if(!nome){toast('Informe o nome.',false);return;}
   const custo=+document.getElementById('mProdCusto').value||0,valor=+document.getElementById('mProdValor').value||0,estoque=+document.getElementById('mProdEstoque').value||0;
-  showLoading();await dbSave('produtos',{id:editingProdutoId||undefined,nome,custo,valor,estoque});hideLoading();fecharModal('modalProduto');renderLoja();toast(editingProdutoId?'Atualizado.':'Produto criado!');
+  const itemProd = editingProdutoId ? {id:editingProdutoId, nome, custo, valor, estoque} : {nome, custo, valor, estoque};
+  showLoading();await dbSave('produtos',itemProd);hideLoading();fecharModal('modalProduto');renderLoja();toast(editingProdutoId?'Atualizado.':'Produto criado!');
 }
 async function excluirProduto(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('produtos',id);hideLoading();renderLoja();toast('Removido.');}
 function abrirModalVenda(prodId){
@@ -1106,6 +1141,106 @@ async function exportarCSV(){
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const url=URL.createObjectURL(blob),link=document.createElement('a');
   link.href=url;link.download=`flyup_${inicio||'todos'}.csv`;link.click();URL.revokeObjectURL(url);toast('CSV exportado!');
+}
+
+
+// ── PARCELAMENTO EVENTOS ──
+function toggleEvParcelamento(){
+  const pag=getSeg('segEvPag');
+  const area=document.getElementById('evParcelamentoArea');
+  area.style.display=pag==='parcelado'?'block':'none';
+  if(pag!=='parcelado'){document.getElementById('evParcelasPreview').textContent='';}
+}
+
+function gerarParcelasPreview(){
+  const np=+document.getElementById('evNumParcelas').value||0;
+  const vtp=+document.getElementById('evTotalParcelas').value||0;
+  const prev=document.getElementById('evParcelasPreview');
+  if(np>=2&&vtp>0){
+    prev.innerHTML='<strong style="color:var(--brown);">'+np+'x de '+fmtBRL(vtp/np)+'</strong> = '+fmtBRL(vtp);
+  } else {
+    prev.textContent='Informe nº de parcelas e valor total.';
+  }
+}
+
+function parcelaBadge(parcelas){
+  if(!parcelas||!parcelas.length) return '';
+  const pagas=parcelas.filter(p=>p.pago).length,total=parcelas.length;
+  const pct=Math.round(pagas/total*100);
+  const cor=pagas===total?'var(--green)':pagas>0?'var(--gold)':'var(--red)';
+  return '<span style="color:'+cor+';font-size:.72rem;">📆 '+pagas+'/'+total+' parcelas</span>';
+}
+
+let _parcelasEventoId=null;
+async function abrirModalParcelas(eventoId){
+  _parcelasEventoId=eventoId;
+  const eventos=await dbGetAll('eventos');
+  const ev=eventos.find(x=>x.id===eventoId);
+  if(!ev)return;
+  document.getElementById('modalParcelasTitulo').textContent='Parcelas — '+ev.nome;
+  const parcelas=ev.parcelas||[];
+  const totalPago=parcelas.filter(p=>p.pago).reduce((s,p)=>s+(p.valor||0),0);
+  const totalPendente=parcelas.filter(p=>!p.pago).reduce((s,p)=>s+(p.valor||0),0);
+  let html=`<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
+    <div class="stat-card" style="flex:1;padding:.75rem 1rem;"><div class="stat-label">Recebido</div><div class="stat-value" style="font-size:1.2rem;color:var(--green);">${fmtBRL(totalPago)}</div></div>
+    <div class="stat-card" style="flex:1;padding:.75rem 1rem;"><div class="stat-label">Pendente</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(totalPendente)}</div></div>
+  </div>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Parcela</th><th>Valor</th><th>Status</th><th>Data Pag.</th><th></th></tr></thead>
+    <tbody id="tbodyParcelas"></tbody>
+  </table></div>`;
+  document.getElementById('modalParcelasConteudo').innerHTML=html;
+  renderTbodyParcelas(parcelas);
+  abrirModal('modalParcelas');
+}
+
+function renderTbodyParcelas(parcelas){
+  document.getElementById('tbodyParcelas').innerHTML=parcelas.map((p,i)=>`<tr>
+    <td style="font-weight:600;">Parcela ${p.num||i+1}</td>
+    <td>${fmtBRL(p.valor)}</td>
+    <td>${p.pago?'<span class="badge badge-green">✓ Pago</span>':'<span class="badge badge-gold">⏳ Pendente</span>'}</td>
+    <td><input type="date" value="${p.dataPagamento||''}" onchange="atualizarDataParcela(${i},this.value)" style="width:130px;font-size:.8rem;padding:.3rem .5rem;"></td>
+    <td><button class="btn btn-sm ${p.pago?'btn-danger':'btn-secondary'}" onclick="toggleParcela(${i})">${p.pago?'Desfazer':'✓ Marcar'}</button></td>
+  </tr>`).join('');
+}
+
+let _parcelasTemp=null;
+async function abrirModalParcelasComCache(eventoId){
+  const eventos=await dbGetAll('eventos');
+  const ev=eventos.find(x=>x.id===eventoId);
+  _parcelasTemp=ev?JSON.parse(JSON.stringify(ev.parcelas||[])):[];
+}
+
+async function toggleParcela(idx){
+  const eventos=await dbGetAll('eventos');
+  const ev=eventos.find(x=>x.id===_parcelasEventoId);
+  if(!ev||!ev.parcelas)return;
+  ev.parcelas[idx].pago=!ev.parcelas[idx].pago;
+  if(ev.parcelas[idx].pago&&!ev.parcelas[idx].dataPagamento)
+    ev.parcelas[idx].dataPagamento=new Date().toISOString().slice(0,10);
+  renderTbodyParcelas(ev.parcelas);
+  // update totals
+  const totalPago=ev.parcelas.filter(p=>p.pago).reduce((s,p)=>s+(p.valor||0),0);
+  const totalPendente=ev.parcelas.filter(p=>!p.pago).reduce((s,p)=>s+(p.valor||0),0);
+  document.querySelector('#modalParcelasConteudo .stat-value:first-of-type').textContent=fmtBRL(totalPago);
+  // save immediately
+  await dbSave('eventos',ev);
+  toast('Parcela atualizada!');
+  renderEventos();
+}
+
+async function atualizarDataParcela(idx,date){
+  const eventos=await dbGetAll('eventos');
+  const ev=eventos.find(x=>x.id===_parcelasEventoId);
+  if(!ev||!ev.parcelas)return;
+  ev.parcelas[idx].dataPagamento=date;
+  await dbSave('eventos',ev);
+}
+
+async function salvarParcelas(){
+  toast('Parcelas salvas!');
+  fecharModal('modalParcelas');
+  renderEventos();
 }
 
 // ── SEED INICIAL ──
