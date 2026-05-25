@@ -682,18 +682,25 @@ async function initFirebase() {
     console.log("✓ Firebase conectado");
 
     // Retorna o usuário atual (ou null) após resolver o estado inicial
+    // ── WHITELIST — mesma lista do loginGoogle ──
+    const EMAILS_AUTORIZADOS = [
+      'flyup.criacao@ghmail.com',
+      'v.assad.creative@gmail.com',
+    ];
+
     return new Promise(resolve => {
-      const unsub = authMod.onAuthStateChanged(_auth, user => {
-        unsub(); // só precisa da primeira resolução
-        if (user) {
+      const unsub = authMod.onAuthStateChanged(_auth, async user => {
+        unsub();
+        if (user && EMAILS_AUTORIZADOS.includes(user.email.toLowerCase())) {
           document.getElementById('loginScreen').style.display = 'none';
           document.getElementById('userArea').style.display = 'flex';
           document.getElementById('userInfo').textContent = user.displayName || user.email;
         } else {
+          if (user) await authMod.signOut(_auth); // expulsa e-mail não autorizado
           document.getElementById('loginScreen').style.display = 'flex';
           document.getElementById('userArea').style.display = 'none';
         }
-        resolve(user);
+        resolve(user && EMAILS_AUTORIZADOS.includes(user.email.toLowerCase()) ? user : null);
       });
     });
 
@@ -707,12 +714,27 @@ async function loginGoogle() {
   try {
     document.getElementById('loginErro').style.display = 'none';
     const provider = new _authMod.GoogleAuthProvider();
-    await _authMod.signInWithPopup(_auth, provider);
-    // login ok — esconde tela e inicia o app
+    const result = await _authMod.signInWithPopup(_auth, provider);
+    const email = result.user.email;
+
+    // ── WHITELIST — adicione os e-mails autorizados aqui ──
+    const EMAILS_AUTORIZADOS = [
+      'janaina@exemplo.com',
+      'luiz@exemplo.com',
+    ];
+    // ─────────────────────────────────────────────────────
+
+    if (!EMAILS_AUTORIZADOS.includes(email.toLowerCase())) {
+      await _authMod.signOut(_auth);
+      const err = document.getElementById('loginErro');
+      err.textContent = '⛔ Acesso não autorizado para ' + email;
+      err.style.display = 'block';
+      return;
+    }
+
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('userArea').style.display = 'flex';
-    const user = _auth.currentUser;
-    document.getElementById('userInfo').textContent = user?.displayName || user?.email || '';
+    document.getElementById('userInfo').textContent = result.user.displayName || email;
     await iniciarApp();
   } catch(e) {
     const err = document.getElementById('loginErro');
@@ -844,9 +866,129 @@ function goTo(page) {
   if (page==='calendario') renderCalendario();
   if (page==='eventos')    renderEventos();
   if (page==='loja')       renderLoja();
+  if (page==='clientes')   renderClientes();
 }
 
-// ── SERVIÇOS ──
+// ── CLIENTES ──
+async function renderClientes() {
+  showLoading();
+  const [clientes, atendimentos, eventos, vendas] = await Promise.all([
+    dbGetAll('clientes'), dbGetAll('atendimentos'), dbGetAll('eventos'), dbGetAll('vendas')
+  ]);
+  hideLoading();
+  const q = (document.getElementById('filtroCliente')?.value||'').toLowerCase();
+  const hoje = new Date(), mm = String(hoje.getMonth()+1).padStart(2,'0'), dd = String(hoje.getDate()).padStart(2,'0');
+  const anivHoje = clientes.filter(c => c.nasc && c.nasc.slice(5) === `${mm}-${dd}`);
+  const alert = document.getElementById('aniversariosAlert');
+  if (anivHoje.length) {
+    alert.innerHTML = `<div class="cliente-aniversario mb-3">🎂 <strong>Aniversariante${anivHoje.length>1?'s':''} hoje:</strong> ${anivHoje.map(c=>`<span style="font-weight:600;color:var(--gold);">${c.nome}</span>`).join(', ')}</div>`;
+  } else { alert.innerHTML=''; }
+  const lista = clientes.filter(c => {
+    if (!q) return true;
+    return (c.nome||'').toLowerCase().includes(q)||(c.cidade||'').toLowerCase().includes(q)||(c.email||'').toLowerCase().includes(q);
+  }).sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+  const grid = document.getElementById('clientesGrid');
+  if (!lista.length) { grid.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="empty-icon">👤</div><p>Nenhum cliente cadastrado.</p></div>`; return; }
+  grid.innerHTML = lista.map(c => {
+    const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+    const atenCount=atendimentos.filter(a=>a.clienteId===c.id).length;
+    const devendo=atendimentos.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+    const evCount=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===c.id)).length;
+    const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
+    const isAniv=c.nasc&&c.nasc.slice(5)===`${mm}-${dd}`;
+    return `<div class="cliente-card" onclick="abrirPerfilCliente('${c.id}')">
+      <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;">
+        <div class="cliente-avatar">${initials}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-weight:600;font-size:.95rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nome}${isAniv?' 🎂':''}</div>
+          <div style="font-size:.75rem;color:var(--taupe);">${c.cidade||''}${idade!==null?' · '+idade+' anos':''}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirModalCliente('${c.id}')">✏️</button>
+      </div>
+      <div style="display:flex;gap:1rem;font-size:.78rem;color:var(--taupe);flex-wrap:wrap;">
+        <span>📋 ${atenCount} atend.</span><span>⭐ ${evCount} eventos</span>
+        ${devendo>0?`<span style="color:var(--red);font-weight:600;">🔴 ${fmtBRL(devendo)}</span>`:''}
+      </div>
+      ${c.wpp?`<div style="margin-top:.5rem;font-size:.75rem;color:var(--taupe);">📱 ${c.wpp}</div>`:''}
+    </div>`;
+  }).join('');
+}
+
+function abrirModalCliente(id) {
+  document.getElementById('modalClienteTitulo').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
+  document.getElementById('mCliId').value = id||'';
+  ['mCliNome','mCliNasc','mCliCidade','mCliWpp','mCliEmail','mCliObs'].forEach(i=>document.getElementById(i).value='');
+  if (id) dbGetAll('clientes').then(list=>{
+    const c=list.find(x=>x.id===id); if(!c)return;
+    document.getElementById('mCliNome').value=c.nome||'';
+    document.getElementById('mCliNasc').value=c.nasc||'';
+    document.getElementById('mCliCidade').value=c.cidade||'';
+    document.getElementById('mCliWpp').value=c.wpp||'';
+    document.getElementById('mCliEmail').value=c.email||'';
+    document.getElementById('mCliObs').value=c.obs||'';
+  });
+  abrirModal('modalCliente');
+}
+
+async function salvarCliente() {
+  const nome=document.getElementById('mCliNome').value.trim();
+  if (!nome) { toast('Informe o nome do cliente.',false); return; }
+  const id=document.getElementById('mCliId').value;
+  const item={nome, nasc:document.getElementById('mCliNasc').value,
+    cidade:document.getElementById('mCliCidade').value.trim(),
+    wpp:document.getElementById('mCliWpp').value.trim(),
+    email:document.getElementById('mCliEmail').value.trim(),
+    obs:document.getElementById('mCliObs').value.trim()};
+  if (id) item.id=id;
+  showLoading(); await dbSave('clientes', item); hideLoading();
+  _clientesCache=null; _todosClientes=[];
+  await carregarClientes();
+  fecharModal('modalCliente');
+  if (currentPage==='clientes') renderClientes();
+  toast(id?'Cliente atualizado.':'Cliente cadastrado!');
+}
+
+async function abrirPerfilCliente(clienteId) {
+  showLoading();
+  const [clientes,atendimentos,servicos,eventos] = await Promise.all([
+    dbGetAll('clientes'),dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')
+  ]);
+  hideLoading();
+  const c=clientes.find(x=>x.id===clienteId); if(!c) return;
+  const atenCliente=atendimentos.filter(a=>a.clienteId===clienteId).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
+  const evsCliente=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===clienteId));
+  const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)+evsCliente.reduce((s,e)=>{
+    const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId); return s+(p?+p.valor:0);
+  },0);
+  const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+  const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
+  const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
+  let html=`
+    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;">
+      <div class="cliente-avatar" style="width:56px;height:56px;font-size:1.5rem;">${initials}</div>
+      <div style="flex:1;">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;color:var(--green);font-weight:300;">${c.nome}</div>
+        <div style="font-size:.8rem;color:var(--taupe);margin-top:.2rem;">${c.cidade?`📍 ${c.cidade} · `:''}${idade!==null?`${idade} anos`:''}</div>
+        <div style="font-size:.8rem;color:var(--taupe);">${c.wpp?`📱 ${c.wpp}  `:''}${c.email?`✉️ ${c.email}`:''}</div>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
+    </div>
+    <div class="stats-grid" style="margin-bottom:1.5rem;">
+      <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenCliente.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Eventos</div><div class="stat-value">${evsCliente.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Total Gasto</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(totalGasto)}</div></div>
+      ${devendo>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">⚠️ A Pagar</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(devendo)}</div></div>`:''}
+    </div>`;
+  if(c.obs) html+=`<div class="card mb-3" style="padding:.75rem 1rem;"><div style="font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--taupe);margin-bottom:.3rem;">Observações</div><div style="font-size:.88rem;">${c.obs}</div></div>`;
+  if(atenCliente.length) html+=`<div class="card mb-3"><div class="card-title">Atendimentos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Serviço</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
+    ${atenCliente.slice(0,10).map(a=>{const s=servicos.find(x=>x.id===a.servicoId);return`<tr><td style="font-size:.8rem;">${fmtDate(a.data)}</td><td><span class="badge ${s?.cor||'badge-green'}">${s?.nome||'—'}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(a.valor)}</td><td>${payBadge(a.pagamento)}</td></tr>`;}).join('')}
+  </tbody></table></div></div>`;
+  if(evsCliente.length) html+=`<div class="card mb-3"><div class="card-title">Eventos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Valor</th><th>Pag.</th></tr></thead><tbody>
+    ${evsCliente.map(e=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};return`<tr><td style="font-size:.8rem;">${fmtDate(e.data)}</td><td>${e.nome}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor||0)}</td><td>${payBadge(p.pagamento)}</td></tr>`;}).join('')}
+  </tbody></table></div></div>`;
+  document.getElementById('modalPerfilConteudo').innerHTML=html;
+  abrirModal('modalPerfilCliente');
+}
 let editingServicoId = null;
 async function renderServicos() {
   showLoading();
