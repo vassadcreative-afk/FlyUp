@@ -672,21 +672,26 @@ async function initFirebase() {
     document.getElementById('firebaseBanner').classList.add('hidden');
     console.log("✓ Firebase conectado");
 
+    // Retorna o usuário atual (ou null) após resolver o estado inicial
     return new Promise(resolve => {
-      authMod.onAuthStateChanged(_auth, user => {
+      const unsub = authMod.onAuthStateChanged(_auth, user => {
+        unsub(); // só precisa da primeira resolução
         if (user) {
           document.getElementById('loginScreen').style.display = 'none';
           document.getElementById('userArea').style.display = 'flex';
           document.getElementById('userInfo').textContent = user.displayName || user.email;
-          resolve(true);
         } else {
           document.getElementById('loginScreen').style.display = 'flex';
           document.getElementById('userArea').style.display = 'none';
         }
+        resolve(user);
       });
     });
 
-  } catch(e) { console.warn("Firebase indisponível, usando localStorage:", e.message); }
+  } catch(e) {
+    console.warn("Firebase indisponível, usando localStorage:", e.message);
+    return null;
+  }
 }
 
 async function loginGoogle() {
@@ -694,6 +699,12 @@ async function loginGoogle() {
     document.getElementById('loginErro').style.display = 'none';
     const provider = new _authMod.GoogleAuthProvider();
     await _authMod.signInWithPopup(_auth, provider);
+    // login ok — esconde tela e inicia o app
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('userArea').style.display = 'flex';
+    const user = _auth.currentUser;
+    document.getElementById('userInfo').textContent = user?.displayName || user?.email || '';
+    await iniciarApp();
   } catch(e) {
     const err = document.getElementById('loginErro');
     err.textContent = 'Erro: ' + (e.code === 'auth/popup-closed-by-user' ? 'Popup fechado.' : e.message);
@@ -708,6 +719,14 @@ async function logout() {
     document.getElementById('userArea').style.display = 'none';
     document.getElementById('userInfo').textContent = '';
   }
+}
+
+async function iniciarApp() {
+  await seedInicial();
+  await populateServicoSelects();
+  await carregarClientes();
+  initRegistro();
+  renderDashboard();
 }
 
 
@@ -1393,12 +1412,12 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
   m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
 });
 (async()=>{
-  await initFirebase();
-  await seedInicial();
-  await populateServicoSelects();
-  await carregarClientes();
-  initRegistro();
-  renderDashboard();
+  const user = await initFirebase();
+  // Se Firebase não carregou (localStorage mode) ou usuário já logado: inicia app direto
+  if (!useFirebase || user) {
+    await iniciarApp();
+  }
+  // Se Firebase carregou mas sem usuário: fica na tela de login, loginGoogle() chama iniciarApp()
 })();
 </script>
 </body>
