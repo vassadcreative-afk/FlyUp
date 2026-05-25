@@ -655,6 +655,15 @@ tr:hover td{background:rgba(245,237,214,.2);}
 <div id="toast"></div>
 
 <script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDZeveOwJh-h2x0DUb1oCcFeGDB_DRiwXc",
+  authDomain: "fly-up-2c0b3.firebaseapp.com",
+  projectId: "fly-up-2c0b3",
+  storageBucket: "fly-up-2c0b3.firebasestorage.app",
+  messagingSenderId: "852829602866",
+  appId: "1:852829602866:web:e67d576c8ab9698331682b"
+};
+
 let db = null, useFirebase = false, _fs = {}, _auth = null, _authMod = null;
 
 async function initFirebase() {
