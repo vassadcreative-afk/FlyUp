@@ -149,6 +149,24 @@ tr:hover td{background:rgba(245,237,214,.2);}
 </head>
 <body>
 
+<!-- TELA DE LOGIN -->
+<div id="loginScreen" style="display:none;position:fixed;inset:0;background:var(--cream);z-index:500;align-items:center;justify-content:center;flex-direction:column;">
+  <div style="text-align:center;padding:2.5rem 2rem;background:var(--white);border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-lg);max-width:340px;width:90%;">
+    <svg width="48" height="28" viewBox="0 0 60 30" fill="none" style="margin-bottom:.75rem;">
+      <path d="M2 20 Q15 8 30 12 Q42 4 58 8" stroke="#C9A84C" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M28 12 Q32 18 38 15" stroke="#C9A84C" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    </svg>
+    <div style="font-family:'Cormorant Garamond',serif;font-size:2rem;color:var(--gold);letter-spacing:.3em;margin-bottom:.25rem;">FLY UP</div>
+    <div style="font-size:.75rem;color:var(--taupe);letter-spacing:.15em;text-transform:uppercase;margin-bottom:2rem;">Gestão</div>
+    <button onclick="loginGoogle()" style="background:var(--white);border:1px solid var(--border);border-radius:8px;padding:.8rem 1.5rem;font-family:'Jost',sans-serif;font-size:.88rem;cursor:pointer;display:flex;align-items:center;gap:.75rem;margin:0 auto;box-shadow:var(--shadow);transition:all .2s;width:100%;justify-content:center;"
+      onmouseenter="this.style.borderColor='var(--gold)'" onmouseleave="this.style.borderColor='var(--border)'">
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" height="20">
+      Entrar com Google
+    </button>
+    <div id="loginErro" style="margin-top:1rem;font-size:.78rem;color:var(--red);display:none;"></div>
+  </div>
+</div>
+
 <div id="firebaseBanner">
   <div style="flex:1;">
     <strong>⚙️ Configure o Firebase</strong> para sincronizar dados entre todos os dispositivos.<br>
@@ -180,6 +198,10 @@ tr:hover td{background:rgba(245,237,214,.2);}
   <button class="hamburger" id="hamburgerBtn" onclick="toggleMobileNav()">
     <span></span><span></span><span></span>
   </button>
+  <div id="userArea" style="display:none;align-items:center;gap:.75rem;flex-shrink:0;">
+    <span id="userInfo" style="font-size:.72rem;color:var(--taupe);letter-spacing:.04em;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+    <button onclick="logout()" class="btn btn-ghost btn-sm" style="font-size:.65rem;padding:.35rem .75rem;">Sair</button>
+  </div>
 </header>
 
 <div class="mobile-nav" id="mobileNav">
@@ -633,919 +655,61 @@ tr:hover td{background:rgba(245,237,214,.2);}
 <div id="toast"></div>
 
 <script>
-const FIREBASE_CONFIG = {
-  apiKey: "AIzaSyDZeveOwJh-h2x0DUb1oCcFeGDB_DRiwXc",
-  authDomain: "fly-up-2c0b3.firebaseapp.com",
-  projectId: "fly-up-2c0b3",
-  storageBucket: "fly-up-2c0b3.firebasestorage.app",
-  messagingSenderId: "852829602866",
-  appId: "1:852829602866:web:e67d576c8ab9698331682b"
-};
-
-let db = null, useFirebase = false, _fs = {};
+let db = null, useFirebase = false, _fs = {}, _auth = null, _authMod = null;
 
 async function initFirebase() {
   if (FIREBASE_CONFIG.apiKey === "COLE_AQUI") return;
   try {
     const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
     const fs = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
+    const authMod = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js");
     const app = initializeApp(FIREBASE_CONFIG);
     db = fs.getFirestore(app);
     _fs = fs;
+    _auth = authMod.getAuth(app);
+    _authMod = authMod;
     useFirebase = true;
     document.getElementById('firebaseBanner').classList.add('hidden');
     console.log("✓ Firebase conectado");
+
+    return new Promise(resolve => {
+      authMod.onAuthStateChanged(_auth, user => {
+        if (user) {
+          document.getElementById('loginScreen').style.display = 'none';
+          document.getElementById('userArea').style.display = 'flex';
+          document.getElementById('userInfo').textContent = user.displayName || user.email;
+          resolve(true);
+        } else {
+          document.getElementById('loginScreen').style.display = 'flex';
+          document.getElementById('userArea').style.display = 'none';
+        }
+      });
+    });
+
   } catch(e) { console.warn("Firebase indisponível, usando localStorage:", e.message); }
 }
 
-async function dbGetAll(col) {
-  if (useFirebase) {
-    const snap = await _fs.getDocs(_fs.collection(db, col));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
-  }
-  try { return JSON.parse(localStorage.getItem('flyup_' + col)) || []; } catch { return []; }
-}
-async function dbSave(col, item) {
-  if (useFirebase) {
-    if (item.id) { const { id, ...data } = item; await _fs.setDoc(_fs.doc(db, col, id), data); }
-    else { const ref = await _fs.addDoc(_fs.collection(db, col), item); item = { ...item, id: ref.id }; }
-    return item;
-  }
-  const list = await dbGetAll(col);
-  if (!item.id) item.id = uid();
-  const idx = list.findIndex(x => x.id === item.id);
-  if (idx >= 0) list[idx] = item; else list.push(item);
-  localStorage.setItem('flyup_' + col, JSON.stringify(list));
-  return item;
-}
-async function dbDelete(col, id) {
-  if (useFirebase) { await _fs.deleteDoc(_fs.doc(db, col, id)); return; }
-  const list = (await dbGetAll(col)).filter(x => x.id !== id);
-  localStorage.setItem('flyup_' + col, JSON.stringify(list));
-}
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
-
-const showLoading = () => document.getElementById('loadingOverlay').classList.remove('hidden');
-const hideLoading = () => document.getElementById('loadingOverlay').classList.add('hidden');
-function toast(msg, ok=true) {
-  const t = document.getElementById('toast');
-  t.textContent = msg; t.style.background = ok ? 'var(--green)' : 'var(--red)';
-  t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 2800);
-}
-const fecharModal = id => document.getElementById(id).classList.remove('open');
-const abrirModal  = id => document.getElementById(id).classList.add('open');
-
-function setSeg(groupId, val) {
-  const btns = document.querySelectorAll('#' + groupId + ' .seg-btn');
-  btns.forEach(b => b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
-  const chosen = [...btns].find(b => b.dataset.val === val);
-  if (!chosen) return;
-  const cls = val === 'online' ? 'seg-blue' : val === 'constelacao' || val === 'vivencia' || val === 'curso' ? 'seg-purple' : 'seg-active';
-  chosen.classList.add(cls);
-}
-function getSeg(groupId) {
-  const a = document.querySelector('#' + groupId + ' .seg-btn.seg-active, #' + groupId + ' .seg-btn.seg-green, #' + groupId + ' .seg-btn.seg-blue, #' + groupId + ' .seg-btn.seg-purple');
-  return a ? a.dataset.val : '';
-}
-const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-const fmtDate = s => { if(!s) return '—'; const [y,m,d]=s.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('pt-BR'); };
-
-function payBadge(p) {
-  const map = { pix:['pay-pix','💠 PIX'], cartao:['pay-cartao','💳 Cartão'], dinheiro:['pay-dinheiro','💵 Dinheiro'], troca:['pay-troca','🤝 Troca'], parcelado:['badge-gold','📆 Parcelado'], apagar:['pay-apagar','🔴 A Pagar'] };
-  const v = map[p]; return v ? `<span class="badge ${v[0]}">${v[1]}</span>` : '';
-}
-function modBadge(m) {
-  const map = { presencial:['mod-presencial','🏠 Presencial'], online:['mod-online','💻 Online'], wpp:['mod-wpp','📱 WhatsApp'] };
-  const v = map[m]; return v ? `<span class="badge ${v[0]}">${v[1]}</span>` : '';
-}
-
-function toggleMobileNav() { document.getElementById('mobileNav').classList.toggle('open'); }
-function closeMobileNav()  { document.getElementById('mobileNav').classList.remove('open'); }
-document.addEventListener('click', e => {
-  const nav = document.getElementById('mobileNav'), btn = document.getElementById('hamburgerBtn');
-  if (nav.classList.contains('open') && !nav.contains(e.target) && !btn.contains(e.target)) nav.classList.remove('open');
-});
-
-let currentPage = 'dashboard';
-let chartReceita, chartMes, chartPagamento, chartModalidade;
-
-function goTo(page) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(b => {
-    b.classList.remove('active');
-    if ((b.getAttribute('onclick')||'').includes("'" + page + "'")) b.classList.add('active');
-  });
-  document.getElementById('page-' + page).classList.add('active');
-  currentPage = page;
-  window.scrollTo({top:0,behavior:'smooth'});
-  if (page==='dashboard')  renderDashboard();
-  if (page==='historico')  renderHistorico();
-  if (page==='servicos')   renderServicos();
-  if (page==='registro')   initRegistro();
-  if (page==='relatorio')  initRelatorio();
-  if (page==='calendario') renderCalendario();
-  if (page==='eventos')    renderEventos();
-  if (page==='loja')       renderLoja();
-  if (page==='clientes')   renderClientes();
-}
-
-// ── CLIENTES ──
-async function renderClientes() {
-  showLoading();
-  const [clientes, atendimentos, eventos, vendas] = await Promise.all([
-    dbGetAll('clientes'), dbGetAll('atendimentos'), dbGetAll('eventos'), dbGetAll('vendas')
-  ]);
-  hideLoading();
-  const q = (document.getElementById('filtroCliente')?.value||'').toLowerCase();
-  const hoje = new Date(), mm = String(hoje.getMonth()+1).padStart(2,'0'), dd = String(hoje.getDate()).padStart(2,'0');
-  const anivHoje = clientes.filter(c => c.nasc && c.nasc.slice(5) === `${mm}-${dd}`);
-  const alert = document.getElementById('aniversariosAlert');
-  if (anivHoje.length) {
-    alert.innerHTML = `<div class="cliente-aniversario mb-3">🎂 <strong>Aniversariante${anivHoje.length>1?'s':''} hoje:</strong> ${anivHoje.map(c=>`<span style="font-weight:600;color:var(--gold);">${c.nome}</span>`).join(', ')}</div>`;
-  } else { alert.innerHTML=''; }
-  const lista = clientes.filter(c => {
-    if (!q) return true;
-    return (c.nome||'').toLowerCase().includes(q) || (c.cidade||'').toLowerCase().includes(q) || (c.email||'').toLowerCase().includes(q);
-  }).sort((a,b) => (a.nome||'').localeCompare(b.nome||''));
-  const grid = document.getElementById('clientesGrid');
-  if (!lista.length) { grid.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="empty-icon">👤</div><p>Nenhum cliente cadastrado.</p></div>`; return; }
-  grid.innerHTML = lista.map(c => {
-    const initials = (c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-    const atenCount = atendimentos.filter(a=>a.clienteId===c.id).length;
-    const devendo = atendimentos.filter(a=>a.clienteId===c.id && a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
-    const evCount = eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===c.id)).length;
-    const idade = c.nasc ? Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)) : null;
-    const isAniv = c.nasc && c.nasc.slice(5)===`${mm}-${dd}`;
-    return `<div class="cliente-card" onclick="abrirPerfilCliente('${c.id}')">
-      <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;">
-        <div class="cliente-avatar">${initials}</div>
-        <div style="flex:1;min-width:0;">
-          <div style="font-weight:600;font-size:.95rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nome}${isAniv?' 🎂':''}</div>
-          <div style="font-size:.75rem;color:var(--taupe);">${c.cidade||''}${idade!==null?' · '+idade+' anos':''}</div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirModalCliente('${c.id}')">✏️</button>
-      </div>
-      <div style="display:flex;gap:1rem;font-size:.78rem;color:var(--taupe);flex-wrap:wrap;">
-        <span>📋 ${atenCount} atend.</span>
-        <span>⭐ ${evCount} eventos</span>
-        ${devendo>0?`<span style="color:var(--red);font-weight:600;">🔴 ${fmtBRL(devendo)}</span>`:''}
-      </div>
-      ${c.wpp?`<div style="margin-top:.5rem;font-size:.75rem;color:var(--taupe);">📱 ${c.wpp}</div>`:''}
-    </div>`;
-  }).join('');
-}
-
-function abrirModalCliente(id) {
-  document.getElementById('modalClienteTitulo').textContent = id ? 'Editar Cliente' : 'Novo Cliente';
-  document.getElementById('mCliId').value = id||'';
-  ['mCliNome','mCliNasc','mCliCidade','mCliWpp','mCliEmail','mCliObs'].forEach(i=>document.getElementById(i).value='');
-  if (id) dbGetAll('clientes').then(list=>{
-    const c=list.find(x=>x.id===id); if(!c)return;
-    document.getElementById('mCliNome').value=c.nome||'';
-    document.getElementById('mCliNasc').value=c.nasc||'';
-    document.getElementById('mCliCidade').value=c.cidade||'';
-    document.getElementById('mCliWpp').value=c.wpp||'';
-    document.getElementById('mCliEmail').value=c.email||'';
-    document.getElementById('mCliObs').value=c.obs||'';
-  });
-  abrirModal('modalCliente');
-}
-
-async function salvarCliente() {
-  const nome=document.getElementById('mCliNome').value.trim();
-  if (!nome) { toast('Informe o nome do cliente.',false); return; }
-  const id=document.getElementById('mCliId').value;
-  const item = {
-    nome, nasc:document.getElementById('mCliNasc').value,
-    cidade:document.getElementById('mCliCidade').value.trim(),
-    wpp:document.getElementById('mCliWpp').value.trim(),
-    email:document.getElementById('mCliEmail').value.trim(),
-    obs:document.getElementById('mCliObs').value.trim()
-  };
-  if (id) item.id=id;
-  showLoading(); await dbSave('clientes', item); hideLoading();
-  _clientesCache = null; _todosClientes = [];
-  await carregarClientes();
-  fecharModal('modalCliente'); renderClientes();
-  toast(id ? 'Cliente atualizado.' : 'Cliente cadastrado!');
-}
-
-async function abrirPerfilCliente(clienteId) {
-  showLoading();
-  const [clientes,atendimentos,servicos,eventos,vendas] = await Promise.all([
-    dbGetAll('clientes'),dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')
-  ]);
-  hideLoading();
-  const c=clientes.find(x=>x.id===clienteId); if(!c) return;
-  const atenCliente=atendimentos.filter(a=>a.clienteId===clienteId).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
-  const evsCliente=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===clienteId));
-  const vendasCliente=vendas.filter(v=>v.clienteId===clienteId);
-  const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)+evsCliente.reduce((s,e)=>{
-    const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId); return s+(p?p.valor:0);
-  },0)+vendasCliente.reduce((s,v)=>s+(v.receita||0),0);
-  const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
-  const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
-  const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
-  let html=`
-    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;">
-      <div class="cliente-avatar" style="width:56px;height:56px;font-size:1.5rem;">${initials}</div>
-      <div style="flex:1;">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;color:var(--green);font-weight:300;">${c.nome}</div>
-        <div style="font-size:.8rem;color:var(--taupe);margin-top:.2rem;">
-          ${c.cidade?`📍 ${c.cidade} · `:''}${idade!==null?`${idade} anos`:''}${c.nasc?` (${fmtDate(c.nasc)})`:''}
-        </div>
-        <div style="font-size:.8rem;color:var(--taupe);">
-          ${c.wpp?`📱 ${c.wpp}  `:''}${c.email?`✉️ ${c.email}`:''}
-        </div>
-      </div>
-      <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
-    </div>
-    <div class="stats-grid" style="margin-bottom:1.5rem;">
-      <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenCliente.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Eventos</div><div class="stat-value">${evsCliente.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Total Gasto</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(totalGasto)}</div></div>
-      ${devendo>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">⚠️ A Pagar</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(devendo)}</div></div>`:''}
-    </div>`;
-  if (c.obs) html+=`<div class="card mb-3" style="padding:.75rem 1rem;"><div style="font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--taupe);margin-bottom:.3rem;">Observações</div><div style="font-size:.88rem;">${c.obs}</div></div>`;
-  if (atenCliente.length) {
-    html+=`<div class="card mb-3"><div class="card-title">Atendimentos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Serviço</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
-      ${atenCliente.slice(0,10).map(a=>{const s=servicos.find(x=>x.id===a.servicoId);return`<tr><td style="font-size:.8rem;">${fmtDate(a.data)}</td><td><span class="badge ${s?.cor||'badge-green'}">${s?.nome||'—'}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(a.valor)}</td><td>${payBadge(a.pagamento)}</td></tr>`;}).join('')}
-    </tbody></table></div></div>`;
-  }
-  if (evsCliente.length) {
-    html+=`<div class="card mb-3"><div class="card-title">Eventos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Valor</th><th>Pag.</th></tr></thead><tbody>
-      ${evsCliente.map(e=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};return`<tr><td style="font-size:.8rem;">${fmtDate(e.data)}</td><td>${e.nome}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor||0)}</td><td>${payBadge(p.pagamento)}</td></tr>`;}).join('')}
-    </tbody></table></div></div>`;
-  }
-  document.getElementById('modalPerfilConteudo').innerHTML=html;
-  abrirModal('modalPerfilCliente');
-}
-
-async function populateClienteSelects() {
-  // no-op: cliente now uses autocomplete, not a select
-}
-
-let _todosClientes = [];
-async function carregarClientes() {
-  _todosClientes = (await dbGetAll('clientes')).sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
-  return _todosClientes;
-}
-
-async function filtrarClienteDropdown() {
-  if (!_todosClientes.length) await carregarClientes();
-  const q = (document.getElementById('regClienteSearch').value||'').toLowerCase().trim();
-  const dd = document.getElementById('regClienteDD');
-  const lista = q ? _todosClientes.filter(c=>(c.nome||'').toLowerCase().includes(q)||(c.cidade||'').toLowerCase().includes(q)) : _todosClientes.slice(0,20);
-  if (!lista.length) { dd.innerHTML=`<div style="padding:.6rem 1rem;font-size:.82rem;color:var(--taupe);">Nenhum cliente encontrado.</div>`; dd.style.display='block'; return; }
-  dd.innerHTML = lista.map(c=>`<div onclick="selecionarClienteReg('${c.id}','${c.nome.replace(/'/g,"\\'")}','${c.cidade||''}')"
-    style="padding:.6rem 1rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border);"
-    onmouseenter="this.style.background='var(--gold-pale)'" onmouseleave="this.style.background=''">
-    <strong>${c.nome}</strong>${c.cidade?`<span style="color:var(--taupe);font-size:.75rem;margin-left:.5rem;">${c.cidade}</span>`:''}
-  </div>`).join('');
-  dd.style.display='block';
-}
-
-function selecionarClienteReg(id, nome, cidade) {
-  document.getElementById('regCliente').value = id;
-  document.getElementById('regClienteSearch').value = nome;
-  document.getElementById('regClienteDD').style.display = 'none';
-  document.getElementById('regClienteSelecionado').textContent = `✓ ${nome}${cidade?' · '+cidade:''}`;
-  document.getElementById('regClienteLimpar').style.display = 'inline-flex';
-}
-
-function limparClienteReg() {
-  document.getElementById('regCliente').value = '';
-  document.getElementById('regClienteSearch').value = '';
-  document.getElementById('regClienteSelecionado').textContent = '';
-  document.getElementById('regClienteLimpar').style.display = 'none';
-}
-
-// ── SERVIÇOS ──
-let editingServicoId = null;
-async function renderServicos() {
-  showLoading();
-  const [servicos, atendimentos] = await Promise.all([dbGetAll('servicos'), dbGetAll('atendimentos')]);
-  hideLoading();
-  const tbody = document.getElementById('tbodyServicos');
-  if (!servicos.length) { tbody.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum serviço.</p></div></td></tr>`; return; }
-  tbody.innerHTML = servicos.sort((a,b)=>a.nome.localeCompare(b.nome)).map(s => {
-    const count = atendimentos.filter(a=>a.servicoId===s.id).length;
-    const rph = s.duracao ? ((s.valor/s.duracao)*60).toFixed(0) : '—';
-    return `<tr><td><span class="badge ${s.cor||'badge-green'}">${s.nome}</span></td><td>${s.duracao} min</td><td>${fmtBRL(s.valor)}</td><td>R$ ${rph}/h</td><td>${count}</td>
-      <td class="tag-actions"><button class="btn btn-ghost btn-sm" onclick="editarServico('${s.id}')">Editar</button><button class="btn btn-danger" onclick="excluirServico('${s.id}')">Excluir</button></td></tr>`;
-  }).join('');
-}
-function abrirModalServico(id) {
-  editingServicoId = id || null;
-  document.getElementById('modalServicoTitulo').textContent = id ? 'Editar Serviço' : 'Novo Serviço';
-  ['mServNome','mServDuracao','mServValor'].forEach(i => document.getElementById(i).value='');
-  document.getElementById('mServCor').value='badge-gold';
-  if (id) dbGetAll('servicos').then(list => { const s=list.find(x=>x.id===id); if(!s) return;
-    document.getElementById('mServNome').value=s.nome; document.getElementById('mServDuracao').value=s.duracao;
-    document.getElementById('mServValor').value=s.valor; document.getElementById('mServCor').value=s.cor||'badge-gold'; });
-  abrirModal('modalServico');
-}
-const editarServico = id => abrirModalServico(id);
-async function salvarServico() {
-  const nome=document.getElementById('mServNome').value.trim(), duracao=+document.getElementById('mServDuracao').value, valor=+document.getElementById('mServValor').value, cor=document.getElementById('mServCor').value;
-  if (!nome||!duracao||isNaN(valor)) { toast('Preencha todos os campos.',false); return; }
-  showLoading();
-  const itemServ = editingServicoId ? {id:editingServicoId, nome, duracao, valor, cor} : {nome, duracao, valor, cor};
-  await dbSave('servicos', itemServ);
-  hideLoading(); fecharModal('modalServico'); renderServicos(); populateServicoSelects();
-  toast(editingServicoId?'Serviço atualizado.':'Serviço criado!');
-}
-async function excluirServico(id) {
-  if (!confirm('Excluir este serviço?')) return;
-  showLoading(); await dbDelete('servicos', id); hideLoading();
-  renderServicos(); populateServicoSelects(); toast('Removido.');
-}
-async function populateServicoSelects() {
-  const servicos = (await dbGetAll('servicos')).sort((a,b)=>a.nome.localeCompare(b.nome));
-  ['regServico','filtroServico','editAtenServico'].forEach(id => {
-    const el = document.getElementById(id); if (!el) return;
-    const isReg = id==='regServico';
-    el.innerHTML = (isReg?'<option value="">— selecione —</option>':'<option value="">Todos</option>') +
-      servicos.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
-  });
-}
-async function filtrarServicoDropdown() {
-  const q = document.getElementById('regServicoSearch').value.toLowerCase();
-  const servicos = (await dbGetAll('servicos')).sort((a,b)=>a.nome.localeCompare(b.nome));
-  const filtered = q ? servicos.filter(s=>s.nome.toLowerCase().includes(q)) : servicos;
-  const sel = document.getElementById('regServico');
-  sel.innerHTML = '<option value="">— selecione —</option>' + filtered.map(s=>`<option value="${s.id}">${s.nome}</option>`).join('');
-}
-
-// ── REGISTRO ──
-async function initRegistro() {
-  await populateServicoSelects();
-  await carregarClientes();
-  const today=new Date().toISOString().split('T')[0], now=new Date().toTimeString().slice(0,5);
-  if (!document.getElementById('regData').value) document.getElementById('regData').value=today;
-  if (!document.getElementById('regHora').value) document.getElementById('regHora').value=now;
-}
-async function preencherServico() {
-  const id=document.getElementById('regServico').value;
-  const s=(await dbGetAll('servicos')).find(x=>x.id===id);
-  if (s) { document.getElementById('regValor').value=s.valor; document.getElementById('regDuracao').value=s.duracao; }
-}
-async function salvarAtendimento() {
-  const servicoId=document.getElementById('regServico').value, data=document.getElementById('regData').value,
-    hora=document.getElementById('regHora').value, valor=+document.getElementById('regValor').value,
-    duracao=+document.getElementById('regDuracao').value, obs=document.getElementById('regObs').value.trim(),
-    pagamento=getSeg('segPagReg'), modalidade=getSeg('segModReg'),
-    clienteId=document.getElementById('regCliente').value;
-  if (!servicoId||!data||!hora||isNaN(valor)||isNaN(duracao)) { toast('Preencha os campos obrigatórios.',false); return; }
-  showLoading();
-  await dbSave('atendimentos', {servicoId,data,hora,valor,duracao,obs,pagamento,modalidade,clienteId:clienteId||null});
-  hideLoading(); limparRegistro(); toast('✦ Atendimento registrado!'); goTo('historico');
-}
-function limparRegistro() {
-  ['regServico','regValor','regDuracao','regObs','regServicoSearch'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('regData').value=new Date().toISOString().split('T')[0];
-  document.getElementById('regHora').value=new Date().toTimeString().slice(0,5);
-  limparClienteReg();
-  ['segPagReg','segModReg'].forEach(g=>document.querySelectorAll('#'+g+' .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple')));
-  populateServicoSelects();
-}
-
-// ── HISTÓRICO ──
-async function renderHistorico() {
-  showLoading();
-  await populateServicoSelects();
-  const [atendimentos, servicos, clientes] = await Promise.all([dbGetAll('atendimentos'), dbGetAll('servicos'), dbGetAll('clientes')]);
-  hideLoading();
-  const txt=(document.getElementById('filtroTexto')?.value||'').toLowerCase(),
-    sId=document.getElementById('filtroServico')?.value||'',
-    pag=document.getElementById('filtroPagamento')?.value||'',
-    mod=document.getElementById('filtroModalidade')?.value||'',
-    mes=document.getElementById('filtroMes')?.value||'';
-  const lista = atendimentos.filter(a=>{
-    const s=servicos.find(x=>x.id===a.servicoId), nome=(s?.nome||'').toLowerCase();
-    if(txt&&!nome.includes(txt)&&!(a.obs||'').toLowerCase().includes(txt)) return false;
-    if(sId&&a.servicoId!==sId) return false;
-    if(pag&&a.pagamento!==pag) return false;
-    if(mod&&a.modalidade!==mod) return false;
-    if(mes&&!a.data?.startsWith(mes)) return false;
-    return true;
-  }).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
-  const tbody=document.getElementById('tbodyHistorico');
-  if (!lista.length) { tbody.innerHTML=`<tr><td colspan="9"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum resultado.</p></div></td></tr>`; return; }
-  tbody.innerHTML=lista.map(a=>{
-    const s=servicos.find(x=>x.id===a.servicoId);
-    const cli=clientes.find(x=>x.id===a.clienteId);
-    const devendo=a.pagamento==='apagar';
-    return `<tr${devendo?' style="background:rgba(184,84,80,.04);"':''}>
-      <td style="font-size:.8rem;color:var(--taupe);">${fmtDate(a.data)}<br><strong style="color:var(--text);">${a.hora||''}</strong></td>
-      <td style="font-size:.8rem;">${cli?`<span style="color:var(--green);font-weight:500;">${cli.nome}</span>`:'<span style="color:var(--taupe);">—</span>'}</td>
-      <td><span class="badge ${s?.cor||'badge-green'}">${s?.nome||'—'}</span></td>
-      <td>${modBadge(a.modalidade)}</td><td>${a.duracao} min</td>
-      <td style="font-weight:600;color:${devendo?'var(--red)':'var(--green)'};">${fmtBRL(a.valor)}</td>
-      <td>${payBadge(a.pagamento)}</td>
-      <td style="font-size:.76rem;color:var(--taupe);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${a.obs||''}</td>
-      <td class="tag-actions">
-        <button class="btn btn-ghost btn-sm" onclick="abrirEditarAtendimento('${a.id}')">✏️</button>
-        <button class="btn btn-danger" onclick="excluirAtendimento('${a.id}')">✕</button>
-      </td></tr>`;
-  }).join('');
-}
-function limparFiltros() {
-  ['filtroTexto','filtroMes'].forEach(id=>document.getElementById(id).value='');
-  ['filtroServico','filtroPagamento','filtroModalidade'].forEach(id=>document.getElementById(id).value='');
-  renderHistorico();
-}
-async function excluirAtendimento(id) {
-  if (!confirm('Excluir?')) return;
-  showLoading(); await dbDelete('atendimentos', id); hideLoading(); renderHistorico(); toast('Removido.');
-}
-async function abrirEditarAtendimento(id) {
-  const [atendimentos, servicos] = await Promise.all([dbGetAll('atendimentos'), dbGetAll('servicos')]);
-  const a=atendimentos.find(x=>x.id===id); if(!a) return;
-  document.getElementById('editAtenServico').innerHTML=servicos.map(s=>`<option value="${s.id}"${s.id===a.servicoId?' selected':''}>${s.nome}</option>`).join('');
-  document.getElementById('editAtenId').value=a.id; document.getElementById('editAtenData').value=a.data;
-  document.getElementById('editAtenHora').value=a.hora; document.getElementById('editAtenValor').value=a.valor;
-  document.getElementById('editAtenDuracao').value=a.duracao; document.getElementById('editAtenObs').value=a.obs||'';
-  if(a.pagamento) setSeg('segPagEdit',a.pagamento);
-  if(a.modalidade) setSeg('segModEdit',a.modalidade);
-  abrirModal('modalEditAten');
-}
-async function salvarEdicaoAtendimento() {
-  const id=document.getElementById('editAtenId').value;
-  const original=(await dbGetAll('atendimentos')).find(a=>a.id===id);
-  showLoading();
-  await dbSave('atendimentos', {...original, servicoId:document.getElementById('editAtenServico').value,
-    data:document.getElementById('editAtenData').value, hora:document.getElementById('editAtenHora').value,
-    valor:+document.getElementById('editAtenValor').value, duracao:+document.getElementById('editAtenDuracao').value,
-    obs:document.getElementById('editAtenObs').value, pagamento:getSeg('segPagEdit'), modalidade:getSeg('segModEdit')});
-  hideLoading(); fecharModal('modalEditAten'); renderHistorico(); toast('Atualizado.');
-}
-
-// ── EVENTOS (novo sistema por participantes) ──
-let _evParticipantes = []; // array of {nome, clienteId, valor, pagamento, papel}
-
-async function abrirModalEvento(editId) {
-  _evParticipantes = [];
-  _clientesCache = null;
-  document.getElementById('evEditId').value = editId||'';
-  document.getElementById('modalEventoTitulo').textContent = editId ? 'Editar Evento' : 'Registrar Evento';
-  ['evNome','evDuracao','evObs'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('evData').value=new Date().toISOString().split('T')[0];
-  document.getElementById('evTotalDisplay').textContent='R$ 0,00';
-  document.getElementById('evTotalPago').textContent='';
-  document.getElementById('evTotalAPagar').textContent='';
-  document.getElementById('evParticipantesList').innerHTML=`<div style="text-align:center;padding:1rem;color:var(--taupe);font-size:.82rem;">Nenhum participante. Clique em "+ Adicionar".</div>`;
-  document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
-  // Pre-load clientes before opening
-  _clientesCache = await dbGetAll('clientes');
-  _clientesCache.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
-  abrirModal('modalEvento');
-  if (editId) {
-    const list = await dbGetAll('eventos');
-    const ev=list.find(x=>x.id===editId); if(!ev) return;
-    document.getElementById('evNome').value=ev.nome||'';
-    document.getElementById('evDuracao').value=ev.duracao||'';
-    document.getElementById('evObs').value=ev.obs||'';
-    document.getElementById('evData').value=ev.data||'';
-    if(ev.tipo) setSeg('segEvTipo',ev.tipo);
-    _evParticipantes=JSON.parse(JSON.stringify(ev.participantes_lista||[]));
-    renderEvParticipantes();
-  }
-}
-
-async function adicionarParticipante() {
-  if (!_clientesCache) { _clientesCache = (await dbGetAll('clientes')).sort((a,b)=>(a.nome||'').localeCompare(b.nome||'')); }
-  _evParticipantes.push({nome:'', clienteId:'', valor:0, pagamento:'pix', papel:'participante'});
-  renderEvParticipantes(_clientesCache);
-}
-
-let _clientesCache=null;
-async function renderEvParticipantes(clientes) {
-  if (!clientes) { if(!_clientesCache) _clientesCache=await dbGetAll('clientes'); clientes=_clientesCache; }
-  const tipo=getSeg('segEvTipo')||'curso';
-  const container=document.getElementById('evParticipantesList');
-  if (!_evParticipantes.length) {
-    container.innerHTML=`<div style="text-align:center;padding:1rem;color:var(--taupe);font-size:.82rem;">Nenhum participante. Clique em "+ Adicionar".</div>`;
-    calcEvTotal(); return;
-  }
-  container.innerHTML=_evParticipantes.map((p,i)=>{
-    const papeisOpts=tipo==='constelacao'
-      ?`<option value="constelado"${p.papel==='constelado'?' selected':''}>⭐ Constelado</option><option value="participante"${p.papel==='participante'?' selected':''}>👤 Participante</option>`
-      :`<option value="participante" selected>👤 Participante</option>`;
-    return `<div class="ev-participante-row" id="evpart-${i}">
-      <select style="width:130px;font-size:.8rem;padding:.35rem .5rem;" onchange="evPartCliente(${i},this.value)">
-        <option value="">— Avulso —</option>
-        ${clientes.map(c=>`<option value="${c.id}"${c.id===p.clienteId?' selected':''}>${c.nome}</option>`).join('')}
-      </select>
-      <input type="text" placeholder="Nome" value="${p.nome||''}" style="flex:1;min-width:80px;font-size:.8rem;padding:.35rem .5rem;" oninput="_evParticipantes[${i}].nome=this.value">
-      ${tipo==='constelacao'?`<select style="width:110px;font-size:.8rem;padding:.35rem .5rem;" onchange="_evParticipantes[${i}].papel=this.value;calcEvTotal()">${papeisOpts}</select>`:''}
-      <input type="number" placeholder="R$" value="${p.valor||''}" style="width:80px;font-size:.8rem;padding:.35rem .5rem;" oninput="_evParticipantes[${i}].valor=+this.value;calcEvTotal()">
-      <select style="width:110px;font-size:.8rem;padding:.35rem .5rem;" onchange="_evParticipantes[${i}].pagamento=this.value;calcEvTotal()">
-        <option value="pix"${p.pagamento==='pix'?' selected':''}>💠 PIX</option>
-        <option value="cartao"${p.pagamento==='cartao'?' selected':''}>💳 Cartão</option>
-        <option value="dinheiro"${p.pagamento==='dinheiro'?' selected':''}>💵 Dinheiro</option>
-        <option value="parcelado"${p.pagamento==='parcelado'?' selected':''}>📆 Parcelado</option>
-        <option value="troca"${p.pagamento==='troca'?' selected':''}>🤝 Troca</option>
-        <option value="apagar"${p.pagamento==='apagar'?' selected':''}>🔴 A Pagar</option>
-      </select>
-      <button class="btn btn-danger" style="padding:.3rem .6rem;font-size:.7rem;" onclick="removerParticipante(${i})">✕</button>
-    </div>`;
-  }).join('');
-  calcEvTotal();
-}
-
-function evPartCliente(i, clienteId) {
-  _evParticipantes[i].clienteId=clienteId;
-  if (clienteId) {
-    const c=(_clientesCache||[]).find(x=>x.id===clienteId);
-    if(c) _evParticipantes[i].nome=c.nome;
-    document.querySelector(`#evpart-${i} input[type="text"]`).value=_evParticipantes[i].nome;
-  }
-}
-
-function removerParticipante(i) {
-  _evParticipantes.splice(i,1);
-  renderEvParticipantes();
-}
-
-function calcEvTotal() {
-  const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
-  const pago=_evParticipantes.filter(p=>p.pagamento!=='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-  const apagar=_evParticipantes.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-  document.getElementById('evTotalDisplay').textContent=fmtBRL(total);
-  document.getElementById('evTotalPago').textContent=pago>0?`✓ Recebido: ${fmtBRL(pago)}`:'';
-  document.getElementById('evTotalAPagar').textContent=apagar>0?`🔴 A receber: ${fmtBRL(apagar)}`:'';
-}
-
-async function salvarEvento() {
-  const tipo=getSeg('segEvTipo'), nome=document.getElementById('evNome').value.trim(), data=document.getElementById('evData').value;
-  if(!tipo||!nome||!data) { toast('Tipo, nome e data são obrigatórios.',false); return; }
-  const duracao=+document.getElementById('evDuracao').value||0, obs=document.getElementById('evObs').value.trim();
-  const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
-  const editId=document.getElementById('evEditId').value;
-  const item={tipo,nome,data,duracao,obs,participantes_lista:JSON.parse(JSON.stringify(_evParticipantes)),
-    participantes:_evParticipantes.length, total};
-  if (editId) item.id=editId;
-  showLoading(); await dbSave('eventos',item); hideLoading();
-  fecharModal('modalEvento'); renderEventos(); toast(editId?'Evento atualizado!':'Evento registrado!');
-}
-
-async function renderEventos() {
-  showLoading(); const eventos=await dbGetAll('eventos'); hideLoading();
-  const tbody=document.getElementById('tbodyEventos');
-  const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
-  if(!eventos.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum evento.</p></div></td></tr>`;return;}
-  tbody.innerHTML=eventos.sort((a,b)=>b.data.localeCompare(a.data)).map(e=>{
-    const lista=e.participantes_lista||[];
-    const apagar=lista.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-    const recebido=lista.filter(p=>p.pagamento!=='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-    return `<tr>
-      <td style="font-size:.8rem;">${fmtDate(e.data)}</td>
-      <td><span class="badge badge-purple">${tipoLabel[e.tipo]||e.tipo}</span></td>
-      <td style="font-weight:500;">${e.nome}</td>
-      <td>${e.duracao?e.duracao+' min':'—'}</td>
-      <td style="font-size:.82rem;">${e.participantes||0} pessoas</td>
-      <td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td>
-      <td style="font-size:.78rem;">
-        ${recebido>0?`<span style="color:var(--green);">✓ ${fmtBRL(recebido)}</span>`:''}
-        ${apagar>0?`<br><span style="color:var(--red);">🔴 ${fmtBRL(apagar)}</span>`:''}
-        ${!recebido&&!apagar?'<span style="color:var(--taupe);">—</span>':''}
-      </td>
-      <td class="tag-actions">
-        <button class="btn btn-ghost btn-sm" onclick="abrirDetalheEvento('${e.id}')">👁</button>
-        <button class="btn btn-ghost btn-sm" onclick="abrirModalEvento('${e.id}')">✏️</button>
-        <button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button>
-      </td>
-    </tr>`;
-  }).join('');
-}
-
-async function abrirDetalheEvento(eventoId) {
-  showLoading();
-  const [eventos, clientes] = await Promise.all([dbGetAll('eventos'), dbGetAll('clientes')]);
-  hideLoading();
-  const ev=eventos.find(x=>x.id===eventoId); if(!ev) return;
-  const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
-  const lista=ev.participantes_lista||[];
-  const apagar=lista.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-  const recebido=lista.filter(p=>p.pagamento!=='apagar').reduce((s,p)=>s+(+p.valor||0),0);
-  let html=`<div style="margin-bottom:1rem;">
-    <div style="font-family:'Cormorant Garamond',serif;font-size:1.5rem;color:var(--green);font-weight:300;">${ev.nome}</div>
-    <div style="font-size:.8rem;color:var(--taupe);">${fmtDate(ev.data)} · ${tipoLabel[ev.tipo]||ev.tipo} · ${ev.duracao?ev.duracao+' min':''}${ev.obs?' · '+ev.obs:''}</div>
-  </div>
-  <div class="stats-grid" style="margin-bottom:1rem;">
-    <div class="stat-card"><div class="stat-label">Participantes</div><div class="stat-value">${lista.length}</div></div>
-    <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(ev.total)}</div></div>
-    <div class="stat-card"><div class="stat-label">Recebido</div><div class="stat-value" style="font-size:1.2rem;color:var(--green);">${fmtBRL(recebido)}</div></div>
-    ${apagar>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">A Receber</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(apagar)}</div></div>`:''}
-  </div>
-  <div class="table-wrap"><table><thead><tr><th>Nome</th><th>Papel</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
-    ${lista.map(p=>{
-      const cli=clientes.find(x=>x.id===p.clienteId);
-      return `<tr>
-        <td>${cli?`<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="fecharModal('modalDetalheEvento');abrirPerfilCliente('${cli.id}')">${cli.nome} 🔗</span>`:p.nome||'Avulso'}</td>
-        <td style="font-size:.78rem;text-transform:capitalize;">${p.papel||'participante'}</td>
-        <td style="font-weight:600;color:${p.pagamento==='apagar'?'var(--red)':'var(--green)'};">${fmtBRL(p.valor)}</td>
-        <td>${payBadge(p.pagamento)}</td>
-      </tr>`;
-    }).join('')}
-  </tbody></table></div>`;
-  document.getElementById('modalDetalheEventoTitulo').textContent=ev.nome;
-  document.getElementById('modalDetalheEventoConteudo').innerHTML=html;
-  abrirModal('modalDetalheEvento');
-}
-
-async function excluirEvento(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('eventos',id);hideLoading();renderEventos();toast('Removido.');}
-
-// ── LOJA ──
-let editingProdutoId=null;
-function abrirModalProduto(id){
-  editingProdutoId=id||null;
-  document.getElementById('modalProdutoTitulo').textContent=id?'Editar Produto':'Novo Produto';
-  ['mProdNome','mProdCusto','mProdValor','mProdEstoque'].forEach(i=>document.getElementById(i).value='');
-  if(id) dbGetAll('produtos').then(list=>{const p=list.find(x=>x.id===id);if(!p)return;document.getElementById('mProdNome').value=p.nome;document.getElementById('mProdCusto').value=p.custo;document.getElementById('mProdValor').value=p.valor;document.getElementById('mProdEstoque').value=p.estoque||0;});
-  abrirModal('modalProduto');
-}
-async function salvarProduto(){
-  const nome=document.getElementById('mProdNome').value.trim();if(!nome){toast('Informe o nome.',false);return;}
-  const custo=+document.getElementById('mProdCusto').value||0,valor=+document.getElementById('mProdValor').value||0,estoque=+document.getElementById('mProdEstoque').value||0;
-  const itemProd = editingProdutoId ? {id:editingProdutoId, nome, custo, valor, estoque} : {nome, custo, valor, estoque};
-  showLoading();await dbSave('produtos',itemProd);hideLoading();fecharModal('modalProduto');renderLoja();toast(editingProdutoId?'Atualizado.':'Produto criado!');
-}
-async function excluirProduto(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('produtos',id);hideLoading();renderLoja();toast('Removido.');}
-function abrirModalVenda(prodId){
-  document.getElementById('vProdId').value=prodId;document.getElementById('vData').value=new Date().toISOString().split('T')[0];document.getElementById('vQtd').value=1;document.getElementById('vLucroDisplay').textContent='R$ 0,00';
-  document.querySelectorAll('#segVPag .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
-  dbGetAll('produtos').then(list=>{const p=list.find(x=>x.id===prodId);if(!p)return;document.getElementById('vCusto').value=p.custo;document.getElementById('vValor').value=p.valor;document.getElementById('modalVendaTitulo').textContent='Vender — '+p.nome;calcVendaTotal();});
-  abrirModal('modalVenda');
-}
-function calcVendaTotal(){const qtd=+document.getElementById('vQtd').value||0,custo=+document.getElementById('vCusto').value||0,valor=+document.getElementById('vValor').value||0;document.getElementById('vLucroDisplay').textContent=fmtBRL((valor-custo)*qtd);}
-async function salvarVenda(){
-  const prodId=document.getElementById('vProdId').value,data=document.getElementById('vData').value,qtd=+document.getElementById('vQtd').value||0,custo=+document.getElementById('vCusto').value||0,valor=+document.getElementById('vValor').value||0,pag=getSeg('segVPag');
-  if(!data||!qtd){toast('Data e quantidade obrigatórias.',false);return;}
-  const produtos=await dbGetAll('produtos'),prod=produtos.find(x=>x.id===prodId);
-  if(prod&&(prod.estoque||0)>=qtd) await dbSave('produtos',{...prod,estoque:(prod.estoque||0)-qtd});
-  showLoading();await dbSave('vendas',{prodId,data,qtd,custo,valor,receita:valor*qtd,lucro:(valor-custo)*qtd,pagamento:pag});hideLoading();
-  fecharModal('modalVenda');renderLoja();toast('Venda registrada!');
-}
-async function excluirVenda(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('vendas',id);hideLoading();renderLoja();toast('Removido.');}
-async function renderLoja(){
-  showLoading();const[produtos,vendas]=await Promise.all([dbGetAll('produtos'),dbGetAll('vendas')]);hideLoading();
-  const grid=document.getElementById('storeGrid');
-  if(!produtos.length){grid.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🛍</div><p>Nenhum produto.</p></div>`;}
-  else{grid.innerHTML=produtos.map(p=>{
-    const vendido=vendas.filter(v=>v.prodId===p.id).reduce((s,v)=>s+v.qtd,0);
-    const margem=p.valor?((p.valor-p.custo)/p.valor*100).toFixed(0):0;
-    return `<div class="store-card"><div class="store-card-name">${p.nome}</div>
-      <div style="display:flex;gap:1rem;font-size:.82rem;color:var(--taupe);margin-bottom:.5rem;flex-wrap:wrap;">
-        <span>Custo: <strong>${fmtBRL(p.custo)}</strong></span>
-        <span>Venda: <strong>${fmtBRL(p.valor)}</strong></span>
-        <span>Margem: <strong>${margem}%</strong></span>
-      </div>
-      <div style="font-size:.78rem;color:var(--taupe);margin-bottom:.75rem;">Estoque: <strong>${p.estoque||0}</strong> · Vendido: ${vendido}</div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;">
-        <button class="btn btn-primary btn-sm" onclick="abrirModalVenda('${p.id}')">+ Vender</button>
-        <button class="btn btn-ghost btn-sm" onclick="abrirModalProduto('${p.id}')">Editar</button>
-        <button class="btn btn-danger" onclick="excluirProduto('${p.id}')">✕</button>
-      </div></div>`;
-  }).join('');}
-  const tbody=document.getElementById('tbodyVendas');
-  if(!vendas.length){tbody.innerHTML=`<tr><td colspan="9"><div class="empty"><div class="empty-icon">✦</div><p>Nenhuma venda.</p></div></td></tr>`;return;}
-  tbody.innerHTML=vendas.sort((a,b)=>b.data.localeCompare(a.data)).map(v=>{const p=produtos.find(x=>x.id===v.prodId);return`<tr>
-    <td style="font-size:.8rem;">${fmtDate(v.data)}</td><td>${p?.nome||'—'}</td><td>${v.qtd}</td>
-    <td>${fmtBRL(v.custo)}</td><td>${fmtBRL(v.valor)}</td>
-    <td style="font-weight:600;color:var(--green);">${fmtBRL(v.receita)}</td>
-    <td style="color:${v.lucro>=0?'var(--green)':'var(--red)'};">${fmtBRL(v.lucro)}</td>
-    <td>${payBadge(v.pagamento)}</td>
-    <td><button class="btn btn-danger" onclick="excluirVenda('${v.id}')">✕</button></td></tr>`;}).join('');
-}
-
-// ── DASHBOARD ──
-async function renderDashboard(){
-  showLoading();
-  const[atendimentos,servicos,eventos,vendas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')]);
-  hideLoading();
-  const now=new Date(),mesAtual=now.toISOString().slice(0,7),atenMes=atendimentos.filter(a=>a.data?.startsWith(mesAtual));
-  const recAtend=atendimentos.filter(a=>a.pagamento!=='apagar').reduce((s,a)=>s+(a.valor||0),0);
-  const recEvs=eventos.reduce((s,e)=>{
-    const lista=e.participantes_lista||[];
-    return s+lista.filter(p=>p.pagamento!=='apagar').reduce((ss,p)=>ss+(+p.valor||0),0);
-  },0);
-  const recLoja=vendas.reduce((s,v)=>s+(v.receita||0),0);
-  const aPagar=atendimentos.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0)+
-    eventos.reduce((s,e)=>{const l=e.participantes_lista||[];return s+l.filter(p=>p.pagamento==='apagar').reduce((ss,p)=>ss+(+p.valor||0),0);},0);
-  const totalMin=atendimentos.reduce((s,a)=>s+(a.duracao||0),0),ticket=atendimentos.length?atendimentos.reduce((s,a)=>s+(a.valor||0),0)/atendimentos.length:0;
-  document.getElementById('statsGrid').innerHTML=`
-    <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atendimentos.length}</div><div class="stat-sub">${atenMes.length} este mês</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Atend.</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recAtend)}</div><div class="stat-sub">${fmtBRL(atenMes.filter(a=>a.pagamento!=='apagar').reduce((s,a)=>s+(a.valor||0),0))} este mês</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${eventos.length} eventos</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(vendas.reduce((s,v)=>s+(v.lucro||0),0))}</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recAtend+recEvs+recLoja)}</div></div>
-    <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticket)}</div></div>
-    <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div></div>
-    ${aPagar>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">🔴 A Receber</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(aPagar)}</div></div>`:''}`;
-  const byServ={};
-  atendimentos.forEach(a=>{if(a.pagamento!=='apagar')byServ[a.servicoId]=(byServ[a.servicoId]||0)+(a.valor||0);});
-  const topServ=Object.entries(byServ).map(([id,r])=>({nome:servicos.find(x=>x.id===id)?.nome||'—',r})).sort((a,b)=>b.r-a.r).slice(0,7);
-  if(chartReceita)chartReceita.destroy();
-  chartReceita=new Chart(document.getElementById('chartReceita'),{type:'doughnut',data:{labels:topServ.map(s=>s.nome),datasets:[{data:topServ.map(s=>s.r),backgroundColor:['#C9A84C','#647746','#776b5f','#504840','#E2C97E','#8FA46A','#A07850'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
-  const byMes={};atendimentos.forEach(a=>{const m=a.data?.slice(0,7);if(m)byMes[m]=(byMes[m]||0)+1;});
-  const meses=Object.keys(byMes).sort().slice(-8);
-  if(chartMes)chartMes.destroy();
-  chartMes=new Chart(document.getElementById('chartMes'),{type:'bar',data:{labels:meses.map(m=>{const[y,mo]=m.split('-');return new Date(y,mo-1).toLocaleString('pt-BR',{month:'short',year:'2-digit'});}),datasets:[{data:meses.map(m=>byMes[m]),backgroundColor:'rgba(100,119,70,.7)',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{family:'Jost',size:10},color:'#776b5f'}},y:{grid:{color:'rgba(226,217,204,.4)'},ticks:{font:{family:'Jost',size:10},color:'#776b5f'}}}}});
-  const byPag={};atendimentos.forEach(a=>{const p=a.pagamento||'Não inf.';byPag[p]=(byPag[p]||0)+1;});
-  const pagK=Object.keys(byPag),pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca',apagar:'🔴 A Pagar','Não inf.':'Não informado'};
-  if(chartPagamento)chartPagamento.destroy();
-  chartPagamento=new Chart(document.getElementById('chartPagamento'),{type:'pie',data:{labels:pagK.map(k=>pagLbl[k]||k),datasets:[{data:pagK.map(k=>byPag[k]),backgroundColor:['#4CAF50','#2196F3','#FF9800','#9C27B0','#B85450','#aaa'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
-  const byMod={};atendimentos.forEach(a=>{const m=a.modalidade||'Não inf.';byMod[m]=(byMod[m]||0)+1;});
-  const modK=Object.keys(byMod),modLbl={presencial:'🏠 Presencial',online:'💻 Online',wpp:'📱 WhatsApp','Não inf.':'Não informado'};
-  if(chartModalidade)chartModalidade.destroy();
-  chartModalidade=new Chart(document.getElementById('chartModalidade'),{type:'doughnut',data:{labels:modK.map(k=>modLbl[k]||k),datasets:[{data:modK.map(k=>byMod[k]),backgroundColor:['#647746','#4A7BB5','#2E7D32','#aaa'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
-  const servNomes=Object.entries(byServ).map(([id,r])=>{const aten=atendimentos.filter(a=>a.servicoId===id&&a.pagamento!=='apagar'),min=aten.reduce((s,a)=>s+(a.duracao||0),0);return{nome:servicos.find(x=>x.id===id)?.nome||'—',r,count:aten.length,min};}).sort((a,b)=>b.r-a.r);
-  document.getElementById('topReceita').innerHTML=servNomes.slice(0,5).length?servNomes.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">${fmtBRL(s.r)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
-  const topT=servNomes.filter(s=>s.min>0).map(s=>({...s,rph:s.r/s.min*60})).sort((a,b)=>b.rph-a.rph);
-  document.getElementById('topTempo').innerHTML=topT.slice(0,5).length?topT.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">R$ ${s.rph.toFixed(0)}/h</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
-}
-
-// ── CALENDÁRIO ──
-let calYear,calMonth;
-async function renderCalendario(){
-  const now=new Date();if(!calYear)calYear=now.getFullYear();if(calMonth===undefined)calMonth=now.getMonth();
-  showLoading();const[atendimentos,servicos,eventos]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')]);hideLoading();
-  const mNames=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
-  document.getElementById('calLabel').textContent=`${mNames[calMonth]} ${calYear}`;
-  const firstDay=new Date(calYear,calMonth,1),lastDay=new Date(calYear,calMonth+1,0),todayStr=now.toISOString().slice(0,10);
-  const byDate={};
-  atendimentos.forEach(a=>{if(!byDate[a.data])byDate[a.data]=[];byDate[a.data].push({...a,_tipo:'aten'});});
-  eventos.forEach(e=>{if(!byDate[e.data])byDate[e.data]=[];byDate[e.data].push({...e,_tipo:'evento'});});
-  let html=`<div class="cal-weekdays">${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-weekday">${d}</div>`).join('')}</div><div class="cal-days">`;
-  for(let i=0;i<firstDay.getDay();i++){const d=new Date(calYear,calMonth,-firstDay.getDay()+i+1);html+=`<div class="cal-day other-month"><div class="cal-day-num">${d.getDate()}</div></div>`;}
-  for(let d=1;d<=lastDay.getDate();d++){
-    const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,items=byDate[ds]||[];
-    const isToday=ds===todayStr;let cls='cal-day'+(isToday?' today':'')+(items.length?' has-events':'');
-    let evHtml='';items.slice(0,3).forEach(a=>{const lbl=a._tipo==='evento'?`⭐${a.nome}`:servicos.find(x=>x.id===a.servicoId)?.nome||'—';evHtml+=`<span class="cal-event-dot">${lbl}</span>`;});
-    if(items.length>3)evHtml+=`<span class="cal-event-dot more">+${items.length-3}</span>`;
-    html+=`<div class="${cls}" onclick="calSelectDay('${ds}')"><div class="cal-day-num">${d}</div>${evHtml}</div>`;
-  }
-  const rem=(firstDay.getDay()+lastDay.getDate())%7;if(rem)for(let i=1;i<=7-rem;i++)html+=`<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
-  document.getElementById('calGrid').innerHTML=html+'</div>';
-  document.getElementById('calDayDetail').style.display='none';
-}
-function calNav(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCalendario();}
-async function calSelectDay(ds){
-  const[atendimentos,servicos,eventos]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')]);
-  const aten=atendimentos.filter(a=>a.data===ds),evs=eventos.filter(e=>e.data===ds);
-  const detail=document.getElementById('calDayDetail');
-  if(!aten.length&&!evs.length){detail.style.display='none';return;}
-  const[y,m,d]=ds.split('-');
-  document.getElementById('calDayTitle').textContent=new Date(+y,+m-1,+d).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
-  let list='';
-  aten.forEach(a=>{const s=servicos.find(x=>x.id===a.servicoId);list+=`<div class="rank-item"><div class="rank-info"><div class="rank-name">${s?.nome||'—'} <span style="font-size:.75rem;color:var(--taupe);">${a.hora||''}</span> ${modBadge(a.modalidade)}</div><div class="rank-sub">${a.duracao}min · ${payBadge(a.pagamento)||'—'}${a.obs?' · '+a.obs:''}</div></div><div class="rank-val">${fmtBRL(a.valor)}</div></div>`;});
-  evs.forEach(e=>{const lista=e.participantes_lista||[];list+=`<div class="rank-item"><div class="rank-info"><div class="rank-name">⭐ ${e.nome} <span class="badge badge-purple">${e.tipo}</span></div><div class="rank-sub">${lista.length} part. · ${e.duracao}min</div></div><div class="rank-val">${fmtBRL(e.total)}</div></div>`;});
-  const total=aten.reduce((s,a)=>s+(a.valor||0),0)+evs.reduce((s,e)=>s+(e.total||0),0);
-  document.getElementById('calDayList').innerHTML=list+`<div style="text-align:right;margin-top:.75rem;font-size:.85rem;font-weight:600;color:var(--green);">Total: ${fmtBRL(total)}</div>`;
-  detail.style.display='block';detail.scrollIntoView({behavior:'smooth',block:'nearest'});
-}
-
-// ── RELATÓRIO ──
-function initRelatorio(){
-  const now=new Date(),ini=document.getElementById('relDataInicio'),fim=document.getElementById('relDataFim');
-  if(!ini.value)ini.value=now.toISOString().slice(0,8)+'01';
-  if(!fim.value)fim.value=now.toISOString().slice(0,10);
-  gerarRelatorio();
-}
-async function gerarRelatorio(){
-  showLoading();
-  const[atendimentos,servicos,eventos,vendas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')]);
-  hideLoading();
-  const inicio=document.getElementById('relDataInicio').value,fim=document.getElementById('relDataFim').value;
-  const aten=atendimentos.filter(a=>(!inicio||a.data>=inicio)&&(!fim||a.data<=fim));
-  const evs=eventos.filter(e=>(!inicio||e.data>=inicio)&&(!fim||e.data<=fim));
-  const vens=vendas.filter(v=>(!inicio||v.data>=inicio)&&(!fim||v.data<=fim));
-  const recAtend=aten.filter(a=>a.pagamento!=='apagar').reduce((s,a)=>s+(a.valor||0),0);
-  const recEvs=evs.reduce((s,e)=>{const l=e.participantes_lista||[];return s+l.filter(p=>p.pagamento!=='apagar').reduce((ss,p)=>ss+(+p.valor||0),0);},0);
-  const recLoja=vens.reduce((s,v)=>s+(v.receita||0),0),lucroLoja=vens.reduce((s,v)=>s+(v.lucro||0),0);
-  const aPagar=aten.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0)+evs.reduce((s,e)=>{const l=e.participantes_lista||[];return s+l.filter(p=>p.pagamento==='apagar').reduce((ss,p)=>ss+(+p.valor||0),0);},0);
-  const totalMin=aten.reduce((s,a)=>s+(a.duracao||0),0),ticket=aten.length?aten.reduce((s,a)=>s+(a.valor||0),0)/aten.length:0,rph=totalMin?recAtend/totalMin*60:0;
-  const byServ={};aten.filter(a=>a.pagamento!=='apagar').forEach(a=>{if(!byServ[a.servicoId])byServ[a.servicoId]={r:0,count:0,min:0};byServ[a.servicoId].r+=(a.valor||0);byServ[a.servicoId].count++;byServ[a.servicoId].min+=(a.duracao||0);});
-  const rows=Object.entries(byServ).map(([id,d])=>{const s=servicos.find(x=>x.id===id);return{nome:s?.nome||'—',...d,rph:d.min?d.r/d.min*60:0,pct:recAtend?(d.r/recAtend*100).toFixed(1):'0'};}).sort((a,b)=>b.r-a.r);
-  const byPag={};aten.forEach(a=>{const p=a.pagamento||'Não inf.';byPag[p]=(byPag[p]||0)+(a.valor||0);});
-  const byMod={};aten.forEach(a=>{const m=a.modalidade||'Não inf.';byMod[m]=(byMod[m]||0)+1;});
-  const pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca',apagar:'🔴 A Pagar','Não inf.':'Não informado'};
-  const modLbl={presencial:'🏠 Presencial',online:'💻 Online',wpp:'📱 WhatsApp','Não inf.':'Não informado'};
-  document.getElementById('relatorioConteudo').innerHTML=`
-    <div class="stats-grid" style="margin-bottom:1.5rem;">
-      <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${aten.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Receita Atend.</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recAtend)}</div></div>
-      <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${evs.length} eventos</div></div>
-      <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(lucroLoja)}</div></div>
-      <div class="stat-card"><div class="stat-label">Total Geral</div><div class="stat-value" style="font-size:1.1rem;">${fmtBRL(recAtend+recEvs+recLoja)}</div></div>
-      ${aPagar>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">🔴 A Receber</div><div class="stat-value" style="font-size:1.1rem;color:var(--red);">${fmtBRL(aPagar)}</div></div>`:''}
-      <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticket)}</div></div>
-      <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${fmtBRL(rph)}/h</div></div>
-    </div>
-    <div class="two-col-grid mb-3">
-      <div class="card"><div class="card-title">Pagamentos</div>${Object.entries(byPag).length?Object.entries(byPag).map(([k,v])=>`<div class="rank-item" style="padding:.5rem 0;"><div class="rank-info"><div class="rank-name">${pagLbl[k]||k}</div></div><div class="rank-val" style="color:${k==='apagar'?'var(--red)':'inherit'};">${fmtBRL(v)}</div></div>`).join(''):'<p style="color:var(--taupe);font-size:.85rem;">Sem dados</p>'}</div>
-      <div class="card"><div class="card-title">Modalidades</div>${Object.entries(byMod).length?Object.entries(byMod).map(([k,v])=>`<div class="rank-item" style="padding:.5rem 0;"><div class="rank-info"><div class="rank-name">${modLbl[k]||k}</div></div><div class="rank-val">${v} atend.</div></div>`).join(''):'<p style="color:var(--taupe);font-size:.85rem;">Sem dados</p>'}</div>
-    </div>
-    <div class="card mb-3"><div class="card-title">Desempenho por Serviço</div>
-      ${rows.length?`<div class="table-wrap"><table><thead><tr><th>Serviço</th><th>Qtd</th><th>Receita</th><th>% Total</th><th>Tempo</th><th>R$/hora</th><th>Ticket</th></tr></thead><tbody>
-        ${rows.map(r=>`<tr><td><strong>${r.nome}</strong></td><td>${r.count}</td><td>${fmtBRL(r.r)}</td>
-          <td><div style="display:flex;align-items:center;gap:.5rem;"><div style="width:60px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;"><div style="width:${r.pct}%;height:100%;background:var(--gold);border-radius:3px;"></div></div>${r.pct}%</div></td>
-          <td>${(r.min/60).toFixed(1)}h</td><td>${fmtBRL(r.rph)}</td><td>${fmtBRL(r.count?r.r/r.count:0)}</td></tr>`).join('')}
-      </tbody></table></div>`:'<p style="color:var(--taupe);font-size:.85rem;">Sem atendimentos no período.</p>'}
-    </div>
-    ${evs.length?`<div class="card mb-3"><div class="card-title">Eventos no Período</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Part.</th><th>Receita</th><th>A Receber</th></tr></thead><tbody>
-      ${evs.sort((a,b)=>b.data.localeCompare(a.data)).map(e=>{const l=e.participantes_lista||[];const apagar=l.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);return`<tr><td>${fmtDate(e.data)}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td>${e.nome}</td><td>${e.participantes||0}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td><td style="color:${apagar>0?'var(--red)':'var(--taupe)'};">${apagar>0?fmtBRL(apagar):'—'}</td></tr>`;}).join('')}
-    </tbody></table></div></div>`:''}`;
-}
-async function exportarCSV(){
-  const inicio=document.getElementById('relDataInicio').value,fim=document.getElementById('relDataFim').value;
-  const[atendimentos,servicos]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos')]);
-  const lista=atendimentos.filter(a=>(!inicio||a.data>=inicio)&&(!fim||a.data<=fim)).sort((a,b)=>a.data.localeCompare(b.data));
-  const lines=['Data,Hora,Serviço,Duração(min),Valor(R$),Pagamento,Modalidade,Obs'];
-  lista.forEach(a=>{const s=servicos.find(x=>x.id===a.servicoId);lines.push(`${a.data},${a.hora},"${s?.nome||''}",${a.duracao},${a.valor},${a.pagamento||''},${a.modalidade||''},"${(a.obs||'').replace(/"/g,"''")}"`)});
-  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
-  const url=URL.createObjectURL(blob),link=document.createElement('a');
-  link.href=url;link.download=`flyup_${inicio||'todos'}.csv`;link.click();URL.revokeObjectURL(url);toast('CSV exportado!');
-}
-
-// ── SEED INICIAL ──
-async function seedInicial(){
-  const existing=await dbGetAll('servicos');if(existing.length)return;
-  const servicos=[
-    {nome:'Direcionamento Baralho Cigano',duracao:60,valor:165,cor:'badge-gold'},
-    {nome:'Apometria (Janaina)',duracao:60,valor:185,cor:'badge-gold'},
-    {nome:'Barras de Access',duracao:60,valor:185,cor:'badge-gold'},
-    {nome:'Reiki Universal e de Limpeza',duracao:60,valor:185,cor:'badge-gold'},
-    {nome:'Alinhamento Neuro Energético',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Ativação Kundalini',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Divórcio Energético',duracao:60,valor:185,cor:'badge-gold'},
-    {nome:'Leitura de Registro Akáshicos',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Mesa Radionica Cigana',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Mesa Radiônica Apometrica',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Mesa Radionica / Radiestesia',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Balão Gástrico (Hipnose)',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Renascimento',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Mesa Radionica Divórcio Energético',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Constelação F. (particular) bonecos',duracao:90,valor:230,cor:'badge-green'},
-    {nome:'Constelação Familiar em grupo',duracao:90,valor:230,cor:'badge-green'},
-    {nome:'Hipnose (TOC, Fobias, Traumas...)',duracao:60,valor:200,cor:'badge-green'},
-    {nome:'Acupuntura',duracao:45,valor:130,cor:'badge-green'},
-    {nome:'Eletrochoque para traumas físicos',duracao:45,valor:150,cor:'badge-green'},
-    {nome:'Aurícula',duracao:45,valor:130,cor:'badge-green'},
-    {nome:'Apometria (Luiz)',duracao:60,valor:185,cor:'badge-green'},
-    {nome:'Reiki (Luiz)',duracao:60,valor:185,cor:'badge-green'},
-    {nome:'Vela de Mel — Adoçamento',duracao:30,valor:40,cor:'badge-brown'},
-    {nome:'Divórcio Energético com Velas',duracao:30,valor:60,cor:'badge-brown'},
-    {nome:'Guardia da Cura',duracao:30,valor:60,cor:'badge-brown'},
-    {nome:'Vela Especial (personalizado)',duracao:30,valor:0,cor:'badge-brown'},
-    {nome:'Vela de Limpeza',duracao:30,valor:30,cor:'badge-brown'},
-  ];
-  const produtos=[
-    {nome:'Mesa Radionica Kit (2 unid.)',custo:0,valor:295,estoque:0},
-    {nome:'Mesa Radionica Kit (1 unid.)',custo:0,valor:225,estoque:0},
-  ];
-  showLoading();
-  await Promise.all([...servicos.map(s=>dbSave('servicos',s)),...produtos.map(p=>dbSave('produtos',p))]);
-  hideLoading();
-}
-
-// ── INIT ──
-document.querySelectorAll('.modal-overlay').forEach(m=>{
-  m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open');});
-});
-(async()=>{
-  await initFirebase();
-  await seedInicial();
-  await populateServicoSelects();
-  await carregarClientes();
-  initRegistro();
-  renderDashboard();
-})();
-  authDomain: "fly-up-2c0b3.firebaseapp.com",
-  projectId: "fly-up-2c0b3",
-  storageBucket: "fly-up-2c0b3.firebasestorage.app",
-  messagingSenderId: "852829602866",
-  appId: "1:852829602866:web:e67d576c8ab9698331682b"
-};
-// ══════════════════════════════════════════════════════
-
-let db = null, useFirebase = false, _fs = {};
-
-async function initFirebase() {
-  if (FIREBASE_CONFIG.apiKey === "COLE_AQUI") return;
+async function loginGoogle() {
   try {
-    const { initializeApp } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js");
-    const fs = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js");
-    const app = initializeApp(FIREBASE_CONFIG);
-    db = fs.getFirestore(app);
-    _fs = fs;
-    useFirebase = true;
-    document.getElementById('firebaseBanner').classList.add('hidden');
-    console.log("✓ Firebase conectado");
-  } catch(e) { console.warn("Firebase indisponível, usando localStorage:", e.message); }
+    document.getElementById('loginErro').style.display = 'none';
+    const provider = new _authMod.GoogleAuthProvider();
+    await _authMod.signInWithPopup(_auth, provider);
+  } catch(e) {
+    const err = document.getElementById('loginErro');
+    err.textContent = 'Erro: ' + (e.code === 'auth/popup-closed-by-user' ? 'Popup fechado.' : e.message);
+    err.style.display = 'block';
+  }
 }
+
+async function logout() {
+  if (_auth && _authMod) {
+    await _authMod.signOut(_auth);
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('userArea').style.display = 'none';
+    document.getElementById('userInfo').textContent = '';
+  }
+}
+
 
 // ── CRUD genérico ──
 async function dbGetAll(col) {
@@ -2232,6 +1396,7 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
   await initFirebase();
   await seedInicial();
   await populateServicoSelects();
+  await carregarClientes();
   initRegistro();
   renderDashboard();
 })();
