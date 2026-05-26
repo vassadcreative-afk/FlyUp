@@ -398,7 +398,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <div class="card-title">Histórico de Vendas</div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Data</th><th>Produto</th><th>Qtd</th><th>Custo</th><th>Venda</th><th>Receita</th><th>Lucro</th><th>Pagamento</th><th></th></tr></thead>
+        <thead><tr><th>Data</th><th>Produto</th><th>Cliente</th><th>Qtd</th><th>Custo</th><th>Venda</th><th>Receita</th><th>Lucro</th><th>Pagamento</th><th></th></tr></thead>
         <tbody id="tbodyVendas"></tbody>
       </table>
     </div>
@@ -624,6 +624,20 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <div class="modal-title" id="modalVendaTitulo">Registrar Venda</div>
     <input type="hidden" id="vProdId">
     <div class="form-grid">
+      <div class="form-group">
+        <label>Cliente (opcional)</label>
+        <div style="position:relative;">
+          <input type="text" id="vClienteSearch" placeholder="Digite o nome para buscar..." autocomplete="off"
+            oninput="filtrarClienteVenda()" onfocus="filtrarClienteVenda()" onblur="setTimeout(()=>document.getElementById('vClienteDD').style.display='none',200)"
+            style="width:100%;">
+          <input type="hidden" id="vClienteId">
+          <div id="vClienteDD" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--gold);border-top:none;border-radius:0 0 6px 6px;max-height:180px;overflow-y:auto;z-index:50;box-shadow:var(--shadow-lg);"></div>
+        </div>
+        <div style="display:flex;gap:.5rem;margin-top:.3rem;align-items:center;">
+          <span id="vClienteSelecionado" style="font-size:.78rem;color:var(--green);font-weight:500;flex:1;"></span>
+          <button type="button" class="btn btn-ghost btn-sm" id="vClienteLimpar" onclick="limparClienteVenda()" style="display:none;padding:.2rem .6rem;font-size:.68rem;">✕</button>
+        </div>
+      </div>
       <div class="form-grid form-grid-2">
         <div class="form-group"><label>Data</label><input type="date" id="vData"></div>
         <div class="form-group"><label>Quantidade</label><input type="number" id="vQtd" min="1" value="1" oninput="calcVendaTotal()"></div>
@@ -681,26 +695,19 @@ async function initFirebase() {
     document.getElementById('firebaseBanner').classList.add('hidden');
     console.log("✓ Firebase conectado");
 
-    // Retorna o usuário atual (ou null) após resolver o estado inicial
-    // ── WHITELIST — mesma lista do loginGoogle ──
-    const EMAILS_AUTORIZADOS = [
-      'flyup.criacao@gmail.com',
-      'v.assad.creative@gmail.com',
-    ];
-
     return new Promise(resolve => {
       const unsub = authMod.onAuthStateChanged(_auth, async user => {
         unsub();
-        if (user && EMAILS_AUTORIZADOS.includes(user.email.toLowerCase())) {
+        if (user) {
           document.getElementById('loginScreen').style.display = 'none';
           document.getElementById('userArea').style.display = 'flex';
           document.getElementById('userInfo').textContent = user.displayName || user.email;
+          resolve(user);
         } else {
-          if (user) await authMod.signOut(_auth); // expulsa e-mail não autorizado
           document.getElementById('loginScreen').style.display = 'flex';
           document.getElementById('userArea').style.display = 'none';
+          resolve(null);
         }
-        resolve(user && EMAILS_AUTORIZADOS.includes(user.email.toLowerCase()) ? user : null);
       });
     });
 
@@ -710,31 +717,29 @@ async function initFirebase() {
   }
 }
 
+// ── WHITELIST ──
+const EMAILS_AUTORIZADOS = [
+  'flyup.criacao@gmail.com',
+  'v.assad.creative@gmail.com',
+];
+
 async function loginGoogle() {
   try {
     document.getElementById('loginErro').style.display = 'none';
     const provider = new _authMod.GoogleAuthProvider();
     const result = await _authMod.signInWithPopup(_auth, provider);
-    const email = result.user.email;
+    const email = result.user.email.toLowerCase();
 
-    // ── WHITELIST — adicione os e-mails autorizados aqui ──
-    const EMAILS_AUTORIZADOS = [
-      'janaina@exemplo.com',
-      'luiz@exemplo.com',
-    ];
-    // ─────────────────────────────────────────────────────
-
-    if (!EMAILS_AUTORIZADOS.includes(email.toLowerCase())) {
+    if (!EMAILS_AUTORIZADOS.includes(email)) {
       await _authMod.signOut(_auth);
-      const err = document.getElementById('loginErro');
-      err.textContent = '⛔ Acesso não autorizado para ' + email;
-      err.style.display = 'block';
+      document.getElementById('loginErro').textContent = '⛔ Acesso não autorizado para ' + result.user.email;
+      document.getElementById('loginErro').style.display = 'block';
       return;
     }
 
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('userArea').style.display = 'flex';
-    document.getElementById('userInfo').textContent = result.user.displayName || email;
+    document.getElementById('userInfo').textContent = result.user.displayName || result.user.email;
     await iniciarApp();
   } catch(e) {
     const err = document.getElementById('loginErro');
@@ -950,16 +955,17 @@ async function salvarCliente() {
 
 async function abrirPerfilCliente(clienteId) {
   showLoading();
-  const [clientes,atendimentos,servicos,eventos] = await Promise.all([
-    dbGetAll('clientes'),dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')
+  const [clientes,atendimentos,servicos,eventos,vendas,produtos] = await Promise.all([
+    dbGetAll('clientes'),dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas'),dbGetAll('produtos')
   ]);
   hideLoading();
   const c=clientes.find(x=>x.id===clienteId); if(!c) return;
   const atenCliente=atendimentos.filter(a=>a.clienteId===clienteId).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
   const evsCliente=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===clienteId));
-  const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)+evsCliente.reduce((s,e)=>{
-    const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId); return s+(p?+p.valor:0);
-  },0);
+  const vendasCliente=vendas.filter(v=>v.clienteId===clienteId).sort((a,b)=>b.data.localeCompare(a.data));
+  const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)
+    +evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p?+p.valor:0);},0)
+    +vendasCliente.reduce((s,v)=>s+(v.receita||0),0);
   const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
   const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
   const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
@@ -976,6 +982,7 @@ async function abrirPerfilCliente(clienteId) {
     <div class="stats-grid" style="margin-bottom:1.5rem;">
       <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenCliente.length}</div></div>
       <div class="stat-card"><div class="stat-label">Eventos</div><div class="stat-value">${evsCliente.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Compras Loja</div><div class="stat-value">${vendasCliente.length}</div></div>
       <div class="stat-card"><div class="stat-label">Total Gasto</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(totalGasto)}</div></div>
       ${devendo>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">⚠️ A Pagar</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(devendo)}</div></div>`:''}
     </div>`;
@@ -985,6 +992,9 @@ async function abrirPerfilCliente(clienteId) {
   </tbody></table></div></div>`;
   if(evsCliente.length) html+=`<div class="card mb-3"><div class="card-title">Eventos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Valor</th><th>Pag.</th></tr></thead><tbody>
     ${evsCliente.map(e=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};return`<tr><td style="font-size:.8rem;">${fmtDate(e.data)}</td><td>${e.nome}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor||0)}</td><td>${payBadge(p.pagamento)}</td></tr>`;}).join('')}
+  </tbody></table></div></div>`;
+  if(vendasCliente.length) html+=`<div class="card mb-3"><div class="card-title">Compras na Loja</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Produto</th><th>Qtd</th><th>Total</th><th>Pag.</th></tr></thead><tbody>
+    ${vendasCliente.map(v=>{const p=produtos.find(x=>x.id===v.prodId);return`<tr><td style="font-size:.8rem;">${fmtDate(v.data)}</td><td>${p?.nome||'—'}</td><td>${v.qtd}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(v.receita)}</td><td>${payBadge(v.pagamento)}</td></tr>`;}).join('')}
   </tbody></table></div></div>`;
   document.getElementById('modalPerfilConteudo').innerHTML=html;
   abrirModal('modalPerfilCliente');
@@ -1232,24 +1242,53 @@ async function salvarProduto(){
   showLoading();await dbSave('produtos',itemProd);hideLoading();fecharModal('modalProduto');renderLoja();toast(editingProdutoId?'Atualizado.':'Produto criado!');
 }
 async function excluirProduto(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('produtos',id);hideLoading();renderLoja();toast('Removido.');}
+function filtrarClienteVenda() {
+  const q=(document.getElementById('vClienteSearch').value||'').toLowerCase().trim();
+  const dd=document.getElementById('vClienteDD');
+  const lista=q?_todosClientes.filter(c=>(c.nome||'').toLowerCase().includes(q)):_todosClientes.slice(0,15);
+  if(!lista.length){dd.innerHTML=`<div style="padding:.6rem 1rem;font-size:.82rem;color:var(--taupe);">Nenhum cliente encontrado.</div>`;dd.style.display='block';return;}
+  dd.innerHTML=lista.map(c=>`<div onclick="selecionarClienteVenda('${c.id}','${c.nome.replace(/'/g,"\\'")}')"
+    style="padding:.55rem 1rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border);"
+    onmouseenter="this.style.background='var(--gold-pale)'" onmouseleave="this.style.background=''">
+    <strong>${c.nome}</strong>${c.cidade?`<span style="color:var(--taupe);font-size:.75rem;margin-left:.5rem;">${c.cidade}</span>`:''}
+  </div>`).join('');
+  dd.style.display='block';
+}
+function selecionarClienteVenda(id,nome){
+  document.getElementById('vClienteId').value=id;
+  document.getElementById('vClienteSearch').value=nome;
+  document.getElementById('vClienteDD').style.display='none';
+  document.getElementById('vClienteSelecionado').textContent='✓ '+nome;
+  document.getElementById('vClienteLimpar').style.display='inline-flex';
+}
+function limparClienteVenda(){
+  document.getElementById('vClienteId').value='';
+  document.getElementById('vClienteSearch').value='';
+  document.getElementById('vClienteSelecionado').textContent='';
+  document.getElementById('vClienteLimpar').style.display='none';
+}
 function abrirModalVenda(prodId){
-  document.getElementById('vProdId').value=prodId;document.getElementById('vData').value=new Date().toISOString().split('T')[0];document.getElementById('vQtd').value=1;document.getElementById('vLucroDisplay').textContent='R$ 0,00';
+  document.getElementById('vProdId').value=prodId;
+  document.getElementById('vData').value=new Date().toISOString().split('T')[0];
+  document.getElementById('vQtd').value=1;
+  document.getElementById('vLucroDisplay').textContent='R$ 0,00';
+  limparClienteVenda();
   document.querySelectorAll('#segVPag .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
   dbGetAll('produtos').then(list=>{const p=list.find(x=>x.id===prodId);if(!p)return;document.getElementById('vCusto').value=p.custo;document.getElementById('vValor').value=p.valor;document.getElementById('modalVendaTitulo').textContent='Vender — '+p.nome;calcVendaTotal();});
   abrirModal('modalVenda');
 }
 function calcVendaTotal(){const qtd=+document.getElementById('vQtd').value||0,custo=+document.getElementById('vCusto').value||0,valor=+document.getElementById('vValor').value||0;document.getElementById('vLucroDisplay').textContent=fmtBRL((valor-custo)*qtd);}
 async function salvarVenda(){
-  const prodId=document.getElementById('vProdId').value,data=document.getElementById('vData').value,qtd=+document.getElementById('vQtd').value||0,custo=+document.getElementById('vCusto').value||0,valor=+document.getElementById('vValor').value||0,pag=getSeg('segVPag');
+  const prodId=document.getElementById('vProdId').value,data=document.getElementById('vData').value,qtd=+document.getElementById('vQtd').value||0,custo=+document.getElementById('vCusto').value||0,valor=+document.getElementById('vValor').value||0,pag=getSeg('segVPag'),clienteId=document.getElementById('vClienteId').value||null;
   if(!data||!qtd){toast('Data e quantidade obrigatórias.',false);return;}
   const produtos=await dbGetAll('produtos'),prod=produtos.find(x=>x.id===prodId);
   if(prod&&(prod.estoque||0)>=qtd) await dbSave('produtos',{...prod,estoque:(prod.estoque||0)-qtd});
-  showLoading();await dbSave('vendas',{prodId,data,qtd,custo,valor,receita:valor*qtd,lucro:(valor-custo)*qtd,pagamento:pag});hideLoading();
+  showLoading();await dbSave('vendas',{prodId,data,qtd,custo,valor,receita:valor*qtd,lucro:(valor-custo)*qtd,pagamento:pag,clienteId});hideLoading();
   fecharModal('modalVenda');renderLoja();toast('Venda registrada!');
 }
 async function excluirVenda(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('vendas',id);hideLoading();renderLoja();toast('Removido.');}
 async function renderLoja(){
-  showLoading();const[produtos,vendas]=await Promise.all([dbGetAll('produtos'),dbGetAll('vendas')]);hideLoading();
+  showLoading();const[produtos,vendas,clientes]=await Promise.all([dbGetAll('produtos'),dbGetAll('vendas'),dbGetAll('clientes')]);hideLoading();
   const grid=document.getElementById('storeGrid');
   if(!produtos.length){grid.innerHTML=`<div class="empty" style="grid-column:1/-1"><div class="empty-icon">🛍</div><p>Nenhum produto.</p></div>`;}
   else{grid.innerHTML=produtos.map(p=>{
@@ -1269,14 +1308,21 @@ async function renderLoja(){
       </div></div>`;
   }).join('');}
   const tbody=document.getElementById('tbodyVendas');
-  if(!vendas.length){tbody.innerHTML=`<tr><td colspan="9"><div class="empty"><div class="empty-icon">✦</div><p>Nenhuma venda.</p></div></td></tr>`;return;}
-  tbody.innerHTML=vendas.sort((a,b)=>b.data.localeCompare(a.data)).map(v=>{const p=produtos.find(x=>x.id===v.prodId);return`<tr>
-    <td style="font-size:.8rem;">${fmtDate(v.data)}</td><td>${p?.nome||'—'}</td><td>${v.qtd}</td>
-    <td>${fmtBRL(v.custo)}</td><td>${fmtBRL(v.valor)}</td>
-    <td style="font-weight:600;color:var(--green);">${fmtBRL(v.receita)}</td>
-    <td style="color:${v.lucro>=0?'var(--green)':'var(--red)'};">${fmtBRL(v.lucro)}</td>
-    <td>${payBadge(v.pagamento)}</td>
-    <td><button class="btn btn-danger" onclick="excluirVenda('${v.id}')">✕</button></td></tr>`;}).join('');
+  if(!vendas.length){tbody.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">✦</div><p>Nenhuma venda.</p></div></td></tr>`;return;}
+  tbody.innerHTML=vendas.sort((a,b)=>b.data.localeCompare(a.data)).map(v=>{
+    const p=produtos.find(x=>x.id===v.prodId);
+    const cli=clientes.find(x=>x.id===v.clienteId);
+    return`<tr>
+      <td style="font-size:.8rem;">${fmtDate(v.data)}</td>
+      <td>${p?.nome||'—'}</td>
+      <td style="font-size:.8rem;">${cli?`<span style="color:var(--green);font-weight:500;cursor:pointer;" onclick="abrirPerfilCliente('${cli.id}')">${cli.nome}</span>`:'<span style="color:var(--taupe);">—</span>'}</td>
+      <td>${v.qtd}</td>
+      <td>${fmtBRL(v.custo)}</td><td>${fmtBRL(v.valor)}</td>
+      <td style="font-weight:600;color:var(--green);">${fmtBRL(v.receita)}</td>
+      <td style="color:${v.lucro>=0?'var(--green)':'var(--red)'};">${fmtBRL(v.lucro)}</td>
+      <td>${payBadge(v.pagamento)}</td>
+      <td><button class="btn btn-danger" onclick="excluirVenda('${v.id}')">✕</button></td></tr>`;
+  }).join('');
 }
 
 // ── DASHBOARD ──
@@ -1564,11 +1610,11 @@ document.querySelectorAll('.modal-overlay').forEach(m=>{
 });
 (async()=>{
   const user = await initFirebase();
-  // Se Firebase não carregou (localStorage mode) ou usuário já logado: inicia app direto
-  if (!useFirebase || user) {
+  // Usuário já logado e autorizado: inicia app direto
+  if (!useFirebase || (user && EMAILS_AUTORIZADOS && EMAILS_AUTORIZADOS.includes(user.email.toLowerCase()))) {
     await iniciarApp();
   }
-  // Se Firebase carregou mas sem usuário: fica na tela de login, loginGoogle() chama iniciarApp()
+  // Se Firebase carregou mas sem usuário ou não autorizado: fica na tela de login
 })();
 </script>
 </body>
