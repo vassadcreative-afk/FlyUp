@@ -247,6 +247,10 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <div class="card"><div class="card-title">🏆 Top por Receita</div><div id="topReceita"></div></div>
     <div class="card"><div class="card-title">⏱ Melhor R$/hora</div><div id="topTempo"></div></div>
   </div>
+  <div class="card mt-3" id="aReceberBlock" style="display:none;">
+    <div class="card-title" style="color:var(--red);">🔴 A Receber — Clientes com Pendências</div>
+    <div id="aReceberLista"></div>
+  </div>
 </div>
 
 <!-- CALENDÁRIO -->
@@ -936,10 +940,14 @@ async function renderClientes() {
   grid.innerHTML = lista.map(c => {
     const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
     const atenCount=atendimentos.filter(a=>a.clienteId===c.id).length;
-    const devendo=atendimentos.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+    const devendoAten=atendimentos.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+    const devendoEvs=eventos.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===c.id&&p.pagamento==='apagar');return s+(p?+p.valor:0);},0);
+    const devendoLoja=vendas.filter(v=>v.clienteId===c.id&&v.pagamento==='apagar').reduce((s,v)=>s+(v.receita||0),0);
+    const devendo=devendoAten+devendoEvs+devendoLoja;
     const evCount=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===c.id)).length;
     const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
     const isAniv=c.nasc&&c.nasc.slice(5)===`${mm}-${dd}`;
+    const wppNum=c.wpp?c.wpp.replace(/\D/g,''):'';
     return `<div class="cliente-card" onclick="abrirPerfilCliente('${c.id}')">
       <div style="display:flex;gap:.75rem;align-items:center;margin-bottom:.75rem;">
         <div class="cliente-avatar">${initials}</div>
@@ -947,13 +955,17 @@ async function renderClientes() {
           <div style="font-weight:600;font-size:.95rem;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.nome}${isAniv?' 🎂':''}</div>
           <div style="font-size:.75rem;color:var(--taupe);">${c.cidade||''}${idade!==null?' · '+idade+' anos':''}</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirModalCliente('${c.id}')">✏️</button>
+        <div style="display:flex;gap:.35rem;">
+          ${c.wpp?`<a href="https://wa.me/55${wppNum}" target="_blank" onclick="event.stopPropagation()" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;padding:.3rem .6rem;font-size:.65rem;">WPP</a>`:''}
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();abrirModalCliente('${c.id}')">✏️</button>
+          <button class="btn btn-danger" onclick="event.stopPropagation();excluirCliente('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">🗑</button>
+        </div>
       </div>
       <div style="display:flex;gap:1rem;font-size:.78rem;color:var(--taupe);flex-wrap:wrap;">
         <span>📋 ${atenCount} atend.</span><span>⭐ ${evCount} eventos</span>
         ${devendo>0?`<span style="color:var(--red);font-weight:600;">🔴 ${fmtBRL(devendo)}</span>`:''}
       </div>
-      ${c.wpp?`<div style="margin-top:.5rem;font-size:.75rem;color:var(--taupe);">📱 ${c.wpp}</div>`:''}
+      ${c.wpp?`<div style="margin-top:.4rem;font-size:.75rem;color:var(--taupe);">📱 ${c.wpp}</div>`:''}
     </div>`;
   }).join('');
 }
@@ -991,6 +1003,15 @@ async function salvarCliente() {
   toast(id?'Cliente atualizado.':'Cliente cadastrado!');
 }
 
+async function excluirCliente(id, nome) {
+  if (!confirm(`Excluir o cliente "${nome}"?\n\nAtenção: os atendimentos e vendas vinculados a este cliente não serão apagados, mas perderão o vínculo.`)) return;
+  showLoading(); await dbDelete('clientes', id); hideLoading();
+  await carregarClientes();
+  if (currentPage==='clientes') renderClientes();
+  fecharModal('modalPerfilCliente');
+  toast('Cliente removido.');
+}
+
 async function abrirPerfilCliente(clienteId) {
   showLoading();
   const [clientes,atendimentos,servicos,eventos,vendas,produtos] = await Promise.all([
@@ -1004,7 +1025,10 @@ async function abrirPerfilCliente(clienteId) {
   const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)
     +evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p?+p.valor:0);},0)
     +vendasCliente.reduce((s,v)=>s+(v.receita||0),0);
-  const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+  const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0)
+    +evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p&&p.pagamento==='apagar'?+p.valor:0);},0)
+    +vendasCliente.filter(v=>v.pagamento==='apagar').reduce((s,v)=>s+(v.receita||0),0);
+  const wppNum=c.wpp?c.wpp.replace(/\D/g,''):'';
   const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
   const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
   let html=`
@@ -1015,7 +1039,11 @@ async function abrirPerfilCliente(clienteId) {
         <div style="font-size:.8rem;color:var(--taupe);margin-top:.2rem;">${c.cidade?`📍 ${c.cidade} · `:''}${idade!==null?`${idade} anos`:''}</div>
         <div style="font-size:.8rem;color:var(--taupe);">${c.wpp?`📱 ${c.wpp}  `:''}${c.email?`✉️ ${c.email}`:''}</div>
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
+        ${c.wpp?`<a href="https://wa.me/55${wppNum}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;">📱 WhatsApp</a>`:''}
+        <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
+        <button class="btn btn-danger" onclick="excluirCliente('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">🗑 Excluir</button>
+      </div>
     </div>
     <div class="stats-grid" style="margin-bottom:1.5rem;">
       <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenCliente.length}</div></div>
@@ -1435,7 +1463,7 @@ async function renderLoja(){
 // ── DASHBOARD ──
 async function renderDashboard(){
   showLoading();
-  const[atendimentos,servicos,eventos,vendas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')]);
+  const[atendimentos,servicos,eventos,vendas,clientes]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas'),dbGetAll('clientes')]);
   hideLoading();
   const mesFiltro=document.getElementById('dashMesFiltro')?.value||'';
   const now=new Date(),mesAtual=now.toISOString().slice(0,7);
@@ -1478,26 +1506,66 @@ async function renderDashboard(){
   document.getElementById('topReceita').innerHTML=servNomes.slice(0,5).length?servNomes.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">${fmtBRL(s.r)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
   const topT=servNomes.filter(s=>s.min>0).map(s=>({...s,rph:s.r/s.min*60})).sort((a,b)=>b.rph-a.rph);
   document.getElementById('topTempo').innerHTML=topT.slice(0,5).length?topT.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">R$ ${s.rph.toFixed(0)}/h</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
+  // ── A RECEBER por cliente ──
+  const aReceberPorCliente=clientes.map(c=>{
+    const dAten=atenFiltrados.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+    const dEvs=evsFiltrados.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===c.id&&p.pagamento==='apagar');return s+(p?+p.valor:0);},0);
+    const dLoja=venFiltrados.filter(v=>v.clienteId===c.id&&v.pagamento==='apagar').reduce((s,v)=>s+(v.receita||0),0);
+    return{id:c.id,nome:c.nome,wpp:c.wpp,total:dAten+dEvs+dLoja};
+  }).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
+  const semCliente=atenFiltrados.filter(a=>!a.clienteId&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+  const totalAReceber=aReceberPorCliente.reduce((s,x)=>s+x.total,0)+semCliente;
+  const bloco=document.getElementById('aReceberBlock'),listaEl=document.getElementById('aReceberLista');
+  if(totalAReceber>0){
+    bloco.style.display='block';
+    let arHtml=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);margin-bottom:.75rem;">
+      <span style="font-size:.82rem;color:var(--taupe);">${aReceberPorCliente.length} cliente(s)${semCliente>0?' + avulsos':''}</span>
+      <span style="font-size:1.15rem;font-weight:700;color:var(--red);">Total: ${fmtBRL(totalAReceber)}</span>
+    </div>`;
+    arHtml+=aReceberPorCliente.map(x=>{const wn=x.wpp?x.wpp.replace(/\D/g,''):'';return`<div class="rank-item">
+      <div class="rank-info"><div class="rank-name" style="cursor:pointer;" onclick="abrirPerfilCliente('${x.id}')">${x.nome}</div></div>
+      ${x.wpp?`<a href="https://wa.me/55${wn}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;padding:.2rem .55rem;font-size:.65rem;margin-right:.4rem;">WPP</a>`:''}
+      <div class="rank-val" style="color:var(--red);">${fmtBRL(x.total)}</div>
+    </div>`;}).join('');
+    if(semCliente>0)arHtml+=`<div class="rank-item"><div class="rank-info"><div class="rank-name" style="color:var(--taupe);">Sem cliente vinculado</div></div><div class="rank-val" style="color:var(--red);">${fmtBRL(semCliente)}</div></div>`;
+    listaEl.innerHTML=arHtml;
+  } else { bloco.style.display='none'; }
 }
 
 // ── CALENDÁRIO ──
 let calYear,calMonth;
 async function renderCalendario(){
   const now=new Date();if(!calYear)calYear=now.getFullYear();if(calMonth===undefined)calMonth=now.getMonth();
-  showLoading();const[atendimentos,servicos,eventos]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')]);hideLoading();
+  showLoading();const[atendimentos,servicos,eventos,clientes]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('clientes')]);hideLoading();
   const mNames=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   document.getElementById('calLabel').textContent=`${mNames[calMonth]} ${calYear}`;
   const firstDay=new Date(calYear,calMonth,1),lastDay=new Date(calYear,calMonth+1,0),todayStr=now.toISOString().slice(0,10);
   const byDate={};
   atendimentos.forEach(a=>{if(!byDate[a.data])byDate[a.data]=[];byDate[a.data].push({...a,_tipo:'aten'});});
   eventos.forEach(e=>{if(!byDate[e.data])byDate[e.data]=[];byDate[e.data].push({...e,_tipo:'evento'});});
+  // add birthdays for this month
+  const anivByDay={};
+  clientes.forEach(c=>{
+    if(!c.nasc) return;
+    const parts=c.nasc.split('-');if(parts.length<3)return;
+    const nascMes=+parts[1]-1, nascDia=+parts[2];
+    if(nascMes===calMonth){
+      const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(nascDia).padStart(2,'0')}`;
+      if(!anivByDay[ds])anivByDay[ds]=[];
+      anivByDay[ds].push(c.nome);
+    }
+  });
   let html=`<div class="cal-weekdays">${['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'].map(d=>`<div class="cal-weekday">${d}</div>`).join('')}</div><div class="cal-days">`;
   for(let i=0;i<firstDay.getDay();i++){const d=new Date(calYear,calMonth,-firstDay.getDay()+i+1);html+=`<div class="cal-day other-month"><div class="cal-day-num">${d.getDate()}</div></div>`;}
   for(let d=1;d<=lastDay.getDate();d++){
     const ds=`${calYear}-${String(calMonth+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`,items=byDate[ds]||[];
-    const isToday=ds===todayStr;let cls='cal-day'+(isToday?' today':'')+(items.length?' has-events':'');
-    let evHtml='';items.slice(0,3).forEach(a=>{const lbl=a._tipo==='evento'?`⭐${a.nome}`:servicos.find(x=>x.id===a.servicoId)?.nome||'—';evHtml+=`<span class="cal-event-dot">${lbl}</span>`;});
-    if(items.length>3)evHtml+=`<span class="cal-event-dot more">+${items.length-3}</span>`;
+    const anivs=anivByDay[ds]||[];
+    const hasAniv=anivs.length>0;
+    const isToday=ds===todayStr;let cls='cal-day'+(isToday?' today':'')+((items.length||hasAniv)?' has-events':'');
+    let evHtml='';
+    anivs.forEach(nome=>{evHtml+=`<span class="cal-event-dot" style="background:#F5EDD6;color:#8B6914;">🎂 ${nome.split(' ')[0]}</span>`;});
+    items.slice(0,2).forEach(a=>{const lbl=a._tipo==='evento'?`⭐${a.nome}`:servicos.find(x=>x.id===a.servicoId)?.nome||'—';evHtml+=`<span class="cal-event-dot">${lbl}</span>`;});
+    if(items.length>2)evHtml+=`<span class="cal-event-dot more">+${items.length-2}</span>`;
     html+=`<div class="${cls}" onclick="calSelectDay('${ds}')"><div class="cal-day-num">${d}</div>${evHtml}</div>`;
   }
   const rem=(firstDay.getDay()+lastDay.getDate())%7;if(rem)for(let i=1;i<=7-rem;i++)html+=`<div class="cal-day other-month"><div class="cal-day-num">${i}</div></div>`;
@@ -1506,17 +1574,23 @@ async function renderCalendario(){
 }
 function calNav(dir){calMonth+=dir;if(calMonth>11){calMonth=0;calYear++;}if(calMonth<0){calMonth=11;calYear--;}renderCalendario();}
 async function calSelectDay(ds){
-  const[atendimentos,servicos,eventos]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos')]);
+  const[atendimentos,servicos,eventos,clientes]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('clientes')]);
   const aten=atendimentos.filter(a=>a.data===ds),evs=eventos.filter(e=>e.data===ds);
+  const parts=ds.split('-');const diaMes=`${parts[1]}-${parts[2]}`;
+  const anivs=clientes.filter(c=>c.nasc&&c.nasc.slice(5)===diaMes);
   const detail=document.getElementById('calDayDetail');
-  if(!aten.length&&!evs.length){detail.style.display='none';return;}
+  if(!aten.length&&!evs.length&&!anivs.length){detail.style.display='none';return;}
   const[y,m,d]=ds.split('-');
   document.getElementById('calDayTitle').textContent=new Date(+y,+m-1,+d).toLocaleDateString('pt-BR',{weekday:'long',day:'numeric',month:'long'});
   let list='';
+  anivs.forEach(c=>{const wn=c.wpp?c.wpp.replace(/\D/g,''):'';list+=`<div class="rank-item" style="background:var(--gold-pale);border-radius:6px;padding:.6rem .75rem;margin-bottom:.4rem;">
+    <div class="rank-info"><div class="rank-name">🎂 Aniversário de <strong>${c.nome}</strong></div><div class="rank-sub">${c.cidade||''}${c.wpp?' · '+c.wpp:''}</div></div>
+    ${c.wpp?`<a href="https://wa.me/55${wn}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;padding:.25rem .55rem;font-size:.65rem;">WPP</a>`:''}
+  </div>`;});
   aten.forEach(a=>{const s=servicos.find(x=>x.id===a.servicoId);list+=`<div class="rank-item"><div class="rank-info"><div class="rank-name">${s?.nome||'—'} <span style="font-size:.75rem;color:var(--taupe);">${a.hora||''}</span> ${modBadge(a.modalidade)}</div><div class="rank-sub">${a.duracao}min · ${payBadge(a.pagamento)||'—'}${a.obs?' · '+a.obs:''}</div></div><div class="rank-val">${fmtBRL(a.valor)}</div></div>`;});
   evs.forEach(e=>{list+=`<div class="rank-item"><div class="rank-info"><div class="rank-name">⭐ ${e.nome} <span class="badge badge-purple">${e.tipo}</span></div><div class="rank-sub">${e.participantes} part. · ${e.duracao}min</div></div><div class="rank-val">${fmtBRL(e.total)}</div></div>`;});
   const total=aten.reduce((s,a)=>s+(a.valor||0),0)+evs.reduce((s,e)=>s+(e.total||0),0);
-  document.getElementById('calDayList').innerHTML=list+`<div style="text-align:right;margin-top:.75rem;font-size:.85rem;font-weight:600;color:var(--green);">Total: ${fmtBRL(total)}</div>`;
+  document.getElementById('calDayList').innerHTML=list+(total>0?`<div style="text-align:right;margin-top:.75rem;font-size:.85rem;font-weight:600;color:var(--green);">Total: ${fmtBRL(total)}</div>`:'');
   detail.style.display='block';detail.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
