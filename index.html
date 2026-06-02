@@ -225,7 +225,14 @@ tr:hover td{background:rgba(245,237,214,.2);}
 
 <!-- DASHBOARD -->
 <div class="page active" id="page-dashboard">
-  <h1 class="page-title">Dashboard</h1>
+  <div class="flex-between mb-3">
+    <div><h1 class="page-title">Dashboard</h1></div>
+    <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap;">
+      <label style="font-size:.72rem;color:var(--taupe);letter-spacing:.08em;text-transform:uppercase;margin:0;">Filtrar mês:</label>
+      <input type="month" id="dashMesFiltro" onchange="renderDashboard()" style="font-size:.82rem;padding:.4rem .75rem;min-width:140px;">
+      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('dashMesFiltro').value='';renderDashboard()">Todos</button>
+    </div>
+  </div>
   <div class="divider"></div>
   <div class="stats-grid" id="statsGrid"></div>
   <div class="charts-grid">
@@ -656,6 +663,8 @@ tr:hover td{background:rgba(245,237,214,.2);}
           <button type="button" class="seg-btn" data-val="pix" onclick="setSeg('segVPag','pix')">💠 PIX</button>
           <button type="button" class="seg-btn" data-val="cartao" onclick="setSeg('segVPag','cartao')">💳 Cartão</button>
           <button type="button" class="seg-btn" data-val="dinheiro" onclick="setSeg('segVPag','dinheiro')">💵 Dinheiro</button>
+          <button type="button" class="seg-btn" data-val="troca" onclick="setSeg('segVPag','troca')">🤝 Troca</button>
+          <button type="button" class="seg-btn" data-val="apagar" onclick="setSeg('segVPag','apagar')">🔴 A Pagar</button>
         </div>
       </div>
     </div>
@@ -834,7 +843,7 @@ const fmtBRL  = v => 'R$ ' + Number(v||0).toLocaleString('pt-BR',{minimumFractio
 const fmtDate = s => { if(!s) return '—'; const [y,m,d]=s.split('-'); return new Date(+y,+m-1,+d).toLocaleDateString('pt-BR'); };
 
 function payBadge(p) {
-  const map = { pix:['pay-pix','💠 PIX'], cartao:['pay-cartao','💳 Cartão'], dinheiro:['pay-dinheiro','💵 Dinheiro'], troca:['pay-troca','🤝 Troca'], parcelado:['badge-gold','📆 Parcelado'] };
+  const map = { pix:['pay-pix','💠 PIX'], cartao:['pay-cartao','💳 Cartão'], dinheiro:['pay-dinheiro','💵 Dinheiro'], troca:['pay-troca','🤝 Troca'], parcelado:['badge-gold','📆 Parcelado'], apagar:['pay-apagar','🔴 A Pagar'] };
   const v = map[p]; return v ? `<span class="badge ${v[0]}">${v[1]}</span>` : '';
 }
 function modBadge(m) {
@@ -875,6 +884,36 @@ function goTo(page) {
 }
 
 // ── CLIENTES ──
+let _todosClientes = [];
+async function carregarClientes() {
+  _todosClientes = await dbGetAll('clientes');
+  _todosClientes.sort((a,b)=>(a.nome||'').localeCompare(b.nome||''));
+}
+function filtrarClienteDropdown() {
+  const q=(document.getElementById('regClienteSearch').value||'').toLowerCase().trim();
+  const dd=document.getElementById('regClienteDD');
+  const lista=q?_todosClientes.filter(c=>(c.nome||'').toLowerCase().includes(q)):_todosClientes.slice(0,20);
+  if(!lista.length){dd.innerHTML=`<div style="padding:.6rem 1rem;font-size:.82rem;color:var(--taupe);">Nenhum cliente encontrado.</div>`;dd.style.display='block';return;}
+  dd.innerHTML=lista.map(c=>`<div onclick="selecionarClienteReg('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')"
+    style="padding:.55rem 1rem;cursor:pointer;font-size:.85rem;border-bottom:1px solid var(--border);"
+    onmouseenter="this.style.background='var(--gold-pale)'" onmouseleave="this.style.background=''">
+    <strong>${c.nome}</strong>${c.cidade?`<span style="color:var(--taupe);font-size:.75rem;margin-left:.5rem;">${c.cidade}</span>`:''}
+  </div>`).join('');
+  dd.style.display='block';
+}
+function selecionarClienteReg(id,nome){
+  document.getElementById('regCliente').value=id;
+  document.getElementById('regClienteSearch').value=nome;
+  document.getElementById('regClienteDD').style.display='none';
+  document.getElementById('regClienteSelecionado').textContent='✓ '+nome;
+  document.getElementById('regClienteLimpar').style.display='inline-flex';
+}
+function limparClienteReg(){
+  document.getElementById('regCliente').value='';
+  document.getElementById('regClienteSearch').value='';
+  document.getElementById('regClienteSelecionado').textContent='';
+  document.getElementById('regClienteLimpar').style.display='none';
+}
 async function renderClientes() {
   showLoading();
   const [clientes, atendimentos, eventos, vendas] = await Promise.all([
@@ -946,7 +985,6 @@ async function salvarCliente() {
     obs:document.getElementById('mCliObs').value.trim()};
   if (id) item.id=id;
   showLoading(); await dbSave('clientes', item); hideLoading();
-  _clientesCache=null; _todosClientes=[];
   await carregarClientes();
   fecharModal('modalCliente');
   if (currentPage==='clientes') renderClientes();
@@ -1078,10 +1116,11 @@ async function salvarAtendimento() {
   const servicoId=document.getElementById('regServico').value, data=document.getElementById('regData').value,
     hora=document.getElementById('regHora').value, valor=+document.getElementById('regValor').value,
     duracao=+document.getElementById('regDuracao').value, obs=document.getElementById('regObs').value.trim(),
-    pagamento=getSeg('segPagReg'), modalidade=getSeg('segModReg');
+    pagamento=getSeg('segPagReg'), modalidade=getSeg('segModReg'),
+    clienteId=document.getElementById('regCliente').value||null;
   if (!servicoId||!data||!hora||isNaN(valor)||isNaN(duracao)) { toast('Preencha os campos obrigatórios.',false); return; }
   showLoading();
-  await dbSave('atendimentos', {servicoId,data,hora,valor,duracao,obs,pagamento,modalidade});
+  await dbSave('atendimentos', {servicoId,data,hora,valor,duracao,obs,pagamento,modalidade,clienteId});
   hideLoading(); limparRegistro(); toast('✦ Atendimento registrado!'); goTo('historico');
 }
 
@@ -1090,6 +1129,7 @@ function limparRegistro() {
   document.getElementById('regData').value=new Date().toISOString().split('T')[0];
   document.getElementById('regHora').value=new Date().toTimeString().slice(0,5);
   ['segPagReg','segModReg'].forEach(g=>document.querySelectorAll('#'+g+' .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple')));
+  limparClienteReg();
   populateServicoSelects();
 }
 
@@ -1097,7 +1137,7 @@ function limparRegistro() {
 async function renderHistorico() {
   showLoading();
   await populateServicoSelects();
-  const [atendimentos, servicos] = await Promise.all([dbGetAll('atendimentos'), dbGetAll('servicos')]);
+  const [atendimentos, servicos, clientes] = await Promise.all([dbGetAll('atendimentos'), dbGetAll('servicos'), dbGetAll('clientes')]);
   hideLoading();
   const txt=(document.getElementById('filtroTexto')?.value||'').toLowerCase(),
     sId=document.getElementById('filtroServico')?.value||'',
@@ -1106,7 +1146,8 @@ async function renderHistorico() {
     mes=document.getElementById('filtroMes')?.value||'';
   const lista = atendimentos.filter(a=>{
     const s=servicos.find(x=>x.id===a.servicoId), nome=(s?.nome||'').toLowerCase();
-    if(txt&&!nome.includes(txt)&&!(a.obs||'').toLowerCase().includes(txt)) return false;
+    const cli=clientes.find(x=>x.id===a.clienteId), cliNome=(cli?.nome||'').toLowerCase();
+    if(txt&&!nome.includes(txt)&&!(a.obs||'').toLowerCase().includes(txt)&&!cliNome.includes(txt)) return false;
     if(sId&&a.servicoId!==sId) return false;
     if(pag&&a.pagamento!==pag) return false;
     if(mod&&a.modalidade!==mod) return false;
@@ -1114,11 +1155,13 @@ async function renderHistorico() {
     return true;
   }).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
   const tbody=document.getElementById('tbodyHistorico');
-  if (!lista.length) { tbody.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum resultado.</p></div></td></tr>`; return; }
+  if (!lista.length) { tbody.innerHTML=`<tr><td colspan="9"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum resultado.</p></div></td></tr>`; return; }
   tbody.innerHTML=lista.map(a=>{
-    const s=servicos.find(x=>x.id===a.servicoId), rph=a.duracao?(a.valor/a.duracao*60).toFixed(0):'—';
+    const s=servicos.find(x=>x.id===a.servicoId);
+    const cli=clientes.find(x=>x.id===a.clienteId);
     return `<tr>
       <td style="font-size:.8rem;color:var(--taupe);">${fmtDate(a.data)}<br><strong style="color:var(--text);">${a.hora||''}</strong></td>
+      <td style="font-size:.82rem;">${cli?`<span style="color:var(--green);cursor:pointer;font-weight:500;" onclick="abrirPerfilCliente('${cli.id}')">${cli.nome}</span>`:'<span style="color:var(--taupe);">—</span>'}</td>
       <td><span class="badge ${s?.cor||'badge-green'}">${s?.nome||'—'}</span></td>
       <td>${modBadge(a.modalidade)}</td><td>${a.duracao} min</td>
       <td style="font-weight:600;color:var(--green);">${fmtBRL(a.valor)}</td>
@@ -1166,45 +1209,86 @@ async function salvarEdicaoAtendimento() {
 }
 
 // ── EVENTOS ──
+let _evParticipantes = []; // list of {clienteId, clienteNome, valor, pagamento}
+
 function abrirModalEvento() {
-  ['evNome','evDuracao','evValorPessoa','evParticipantes','evValorConstelado','evParticipantesConste','evObs','evNumParcelas','evTotalParcelas'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('evParcelamentoArea').style.display='none';
-  document.getElementById('evParcelasPreview').textContent='';
+  _evParticipantes = [];
+  document.getElementById('evNome').value='';
+  document.getElementById('evDuracao').value='';
+  document.getElementById('evObs').value='';
   document.getElementById('evData').value=new Date().toISOString().split('T')[0];
   document.getElementById('evTotalDisplay').textContent='R$ 0,00';
-  ['segEvTipo','segEvPag'].forEach(g=>document.querySelectorAll('#'+g+' .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple')));
-  document.getElementById('evCursoFields').style.display='block';
-  document.getElementById('evConsteFields').style.display='none';
+  document.getElementById('evTotalPago').textContent='';
+  document.getElementById('evTotalAPagar').textContent='';
+  document.getElementById('evEditId').value='';
+  document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
+  renderEvParticipantes();
   abrirModal('modalEvento');
 }
-function toggleEvTipo() {
-  const t=getSeg('segEvTipo');
-  document.getElementById('evCursoFields').style.display=t==='constelacao'?'none':'block';
-  document.getElementById('evConsteFields').style.display=t==='constelacao'?'block':'none';
-  calcEvTotal();
+
+function adicionarParticipante() {
+  _evParticipantes.push({clienteId:'',clienteNome:'',valor:0,pagamento:'pix'});
+  renderEvParticipantes();
 }
-function calcEvTotal() {
-  const t=getSeg('segEvTipo'); let total=0;
-  if(t==='constelacao') { total=(+document.getElementById('evValorConstelado').value||0)+(+document.getElementById('evParticipantesConste').value||0)*20; }
-  else { total=(+document.getElementById('evValorPessoa').value||0)*(+document.getElementById('evParticipantes').value||0); }
+
+function renderEvParticipantes() {
+  const lista = document.getElementById('evParticipantesList');
+  if(!_evParticipantes.length){lista.innerHTML=`<div style="color:var(--taupe);font-size:.82rem;padding:.5rem 0;">Nenhum participante adicionado.</div>`;calcEvTotal2();return;}
+  lista.innerHTML=_evParticipantes.map((p,i)=>`
+    <div class="ev-participante-row">
+      <div style="position:relative;flex:1;min-width:140px;">
+        <input type="text" placeholder="Buscar cliente..." value="${p.clienteNome||''}"
+          oninput="filtrarEvCliente(${i},this.value)" onfocus="filtrarEvCliente(${i},this.value)"
+          onblur="setTimeout(()=>{const d=document.getElementById('evCliDD${i}');if(d)d.style.display='none';},200)"
+          style="width:100%;font-size:.82rem;padding:.4rem .6rem;">
+        <div id="evCliDD${i}" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--white);border:1px solid var(--gold);border-top:none;border-radius:0 0 6px 6px;max-height:160px;overflow-y:auto;z-index:60;box-shadow:var(--shadow-lg);"></div>
+      </div>
+      <input type="number" placeholder="Valor R$" value="${p.valor||''}" min="0" step="0.01"
+        oninput="_evParticipantes[${i}].valor=+this.value;calcEvTotal2()"
+        style="width:100px;font-size:.82rem;padding:.4rem .6rem;">
+      <select onchange="_evParticipantes[${i}].pagamento=this.value" style="font-size:.78rem;padding:.4rem .5rem;">
+        <option value="pix"${p.pagamento==='pix'?' selected':''}>PIX</option>
+        <option value="cartao"${p.pagamento==='cartao'?' selected':''}>Cartão</option>
+        <option value="dinheiro"${p.pagamento==='dinheiro'?' selected':''}>Dinheiro</option>
+        <option value="troca"${p.pagamento==='troca'?' selected':''}>Troca</option>
+        <option value="apagar"${p.pagamento==='apagar'?' selected':''}>A Pagar</option>
+      </select>
+      <button class="btn btn-danger" style="padding:.3rem .6rem;" onclick="_evParticipantes.splice(${i},1);renderEvParticipantes()">✕</button>
+    </div>`).join('');
+  calcEvTotal2();
+}
+
+function filtrarEvCliente(idx, q) {
+  const dd = document.getElementById('evCliDD'+idx); if(!dd) return;
+  const qL = q.toLowerCase().trim();
+  const lista = qL ? _todosClientes.filter(c=>(c.nome||'').toLowerCase().includes(qL)) : _todosClientes.slice(0,15);
+  if(!lista.length){dd.innerHTML=`<div style="padding:.5rem .8rem;font-size:.78rem;color:var(--taupe);">Nenhum encontrado</div>`;dd.style.display='block';return;}
+  dd.innerHTML=lista.map(c=>`<div onclick="_evParticipantes[${idx}].clienteId='${c.id}';_evParticipantes[${idx}].clienteNome='${(c.nome||'').replace(/'/g,"\\'")}';renderEvParticipantes();"
+    style="padding:.45rem .8rem;cursor:pointer;font-size:.82rem;border-bottom:1px solid var(--border);"
+    onmouseenter="this.style.background='var(--gold-pale)'" onmouseleave="this.style.background=''">
+    ${c.nome}${c.cidade?`<span style="color:var(--taupe);font-size:.72rem;margin-left:.4rem;">${c.cidade}</span>`:''}
+  </div>`).join('');
+  dd.style.display='block';
+}
+
+function calcEvTotal2() {
+  const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
+  const pago=_evParticipantes.filter(p=>p.pagamento!=='apagar').reduce((s,p)=>s+(+p.valor||0),0);
+  const apagar=_evParticipantes.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);
   document.getElementById('evTotalDisplay').textContent=fmtBRL(total);
+  document.getElementById('evTotalPago').textContent=pago>0?'✓ Pago: '+fmtBRL(pago):'';
+  document.getElementById('evTotalAPagar').textContent=apagar>0?'🔴 A receber: '+fmtBRL(apagar):'';
 }
+
 async function salvarEvento() {
   const tipo=getSeg('segEvTipo'), nome=document.getElementById('evNome').value.trim(), data=document.getElementById('evData').value;
   if(!tipo||!nome||!data) { toast('Tipo, nome e data são obrigatórios.',false); return; }
-  const duracao=+document.getElementById('evDuracao').value||0, pag=getSeg('segEvPag'), obs=document.getElementById('evObs').value.trim();
-  let total=0, participantes=0, valorConstelado=0, valorPessoa=0;
-  if(tipo==='constelacao') { valorConstelado=+document.getElementById('evValorConstelado').value||0; participantes=+document.getElementById('evParticipantesConste').value||0; total=valorConstelado+participantes*20; }
-  else { valorPessoa=+document.getElementById('evValorPessoa').value||0; participantes=+document.getElementById('evParticipantes').value||0; total=valorPessoa*participantes; }
-  let parcelas=null;
-  if(pag==='parcelado'){
-    const np=+document.getElementById('evNumParcelas').value||0,vtp=+document.getElementById('evTotalParcelas').value||0;
-    if(np>=2&&vtp>0){
-      const valorParcela=vtp/np;
-      parcelas=Array.from({length:np},(_,i)=>({num:i+1,valor:valorParcela,pago:false,dataPagamento:''}));
-    }
-  }
-  showLoading(); await dbSave('eventos',{tipo,nome,data,duracao,participantes,valorConstelado,valorPessoa,total,pagamento:pag,obs,parcelas}); hideLoading();
+  const duracao=+document.getElementById('evDuracao').value||0, obs=document.getElementById('evObs').value.trim();
+  const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
+  const participantes_lista=_evParticipantes.map(p=>({clienteId:p.clienteId||null,clienteNome:p.clienteNome||'',valor:+p.valor||0,pagamento:p.pagamento||'pix'}));
+  showLoading();
+  await dbSave('eventos',{tipo,nome,data,duracao,participantes:participantes_lista.length,total,obs,participantes_lista});
+  hideLoading();
   fecharModal('modalEvento'); renderEventos(); toast('Evento registrado!');
 }
 async function renderEventos() {
@@ -1212,18 +1296,41 @@ async function renderEventos() {
   const tbody=document.getElementById('tbodyEventos');
   const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
   if(!eventos.length){tbody.innerHTML=`<tr><td colspan="8"><div class="empty"><div class="empty-icon">✦</div><p>Nenhum evento.</p></div></td></tr>`;return;}
-  tbody.innerHTML=eventos.sort((a,b)=>b.data.localeCompare(a.data)).map(e=>`<tr>
+  tbody.innerHTML=eventos.sort((a,b)=>b.data.localeCompare(a.data)).map(e=>{
+    const lista=e.participantes_lista||[];
+    const pago=lista.filter(p=>p.pagamento!=='apagar').reduce((s,p)=>s+(+p.valor||0),0);
+    const apagar=lista.filter(p=>p.pagamento==='apagar').reduce((s,p)=>s+(+p.valor||0),0);
+    const statusPag=apagar>0?`<span class="badge pay-apagar">🔴 ${fmtBRL(apagar)}</span>`:(lista.length?`<span class="badge badge-green">✓ Pago</span>`:'—');
+    return `<tr>
     <td style="font-size:.8rem;">${fmtDate(e.data)}</td>
     <td><span class="badge badge-purple">${tipoLabel[e.tipo]||e.tipo}</span></td>
-    <td style="font-weight:500;">${e.nome}</td>
+    <td style="font-weight:500;cursor:pointer;" onclick="abrirDetalheEvento('${e.id}')">${e.nome}</td>
     <td>${e.duracao?e.duracao+' min':'—'}</td>
-    <td style="font-size:.82rem;">${e.participantes||0} pessoas${e.tipo==='constelacao'?`<br><small style="color:var(--taupe);">Constelado: ${fmtBRL(e.valorConstelado)}</small>`:''}</td>
+    <td style="font-size:.82rem;">${e.participantes||lista.length} pessoas</td>
     <td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td>
-    <td>${payBadge(e.pagamento)}</td>
-    <td>${e.parcelas&&e.parcelas.length?`<button class="btn btn-ghost btn-sm" onclick="abrirModalParcelas('${e.id}')">${parcelaBadge(e.parcelas)}</button>`:'<span style="color:var(--taupe);font-size:.75rem;">—</span>'}</td>
+    <td>${statusPag}</td>
+    <td></td>
     <td><button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button></td>
-  </tr>`).join('');
+  </tr>`;}).join('');
 }
+
+async function abrirDetalheEvento(id){
+  const eventos=await dbGetAll('eventos');
+  const e=eventos.find(x=>x.id===id);if(!e)return;
+  const lista=e.participantes_lista||[];
+  const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
+  document.getElementById('modalDetalheEventoTitulo').textContent=e.nome;
+  document.getElementById('modalDetalheEventoConteudo').innerHTML=`
+    <div style="font-size:.82rem;color:var(--taupe);margin-bottom:1rem;">${tipoLabel[e.tipo]||e.tipo} · ${fmtDate(e.data)}${e.duracao?' · '+e.duracao+'min':''}</div>
+    ${lista.length?`<div class="table-wrap"><table><thead><tr><th>Participante</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
+      ${lista.map(p=>`<tr><td>${p.clienteNome||'<em style="color:var(--taupe);">Avulso</em>'}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor)}</td><td>${payBadge(p.pagamento)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div style="text-align:right;margin-top:.75rem;font-weight:600;color:var(--green);">Total: ${fmtBRL(e.total)}</div>`
+    :'<p style="color:var(--taupe);">Sem participantes registrados.</p>'}
+    ${e.obs?`<div style="margin-top:1rem;font-size:.82rem;color:var(--taupe);">📝 ${e.obs}</div>`:''}`;
+  abrirModal('modalDetalheEvento');
+}
+
 async function excluirEvento(id){if(!confirm('Excluir?'))return;showLoading();await dbDelete('eventos',id);hideLoading();renderEventos();toast('Removido.');}
 
 // ── LOJA ──
@@ -1330,19 +1437,28 @@ async function renderDashboard(){
   showLoading();
   const[atendimentos,servicos,eventos,vendas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')]);
   hideLoading();
-  const now=new Date(),mesAtual=now.toISOString().slice(0,7),atenMes=atendimentos.filter(a=>a.data?.startsWith(mesAtual));
-  const recAtend=atendimentos.reduce((s,a)=>s+(a.valor||0),0),recEvs=eventos.reduce((s,e)=>s+(e.total||0),0),recLoja=vendas.reduce((s,v)=>s+(v.receita||0),0);
-  const totalMin=atendimentos.reduce((s,a)=>s+(a.duracao||0),0),ticket=atendimentos.length?recAtend/atendimentos.length:0;
+  const mesFiltro=document.getElementById('dashMesFiltro')?.value||'';
+  const now=new Date(),mesAtual=now.toISOString().slice(0,7);
+  // filter by selected month or all
+  const atenFiltrados = mesFiltro ? atendimentos.filter(a=>a.data?.startsWith(mesFiltro)) : atendimentos;
+  const evsFiltrados  = mesFiltro ? eventos.filter(e=>e.data?.startsWith(mesFiltro)) : eventos;
+  const venFiltrados  = mesFiltro ? vendas.filter(v=>v.data?.startsWith(mesFiltro)) : vendas;
+  const atenMes=atendimentos.filter(a=>a.data?.startsWith(mesAtual));
+  const recAtend=atenFiltrados.reduce((s,a)=>s+(a.valor||0),0),recEvs=evsFiltrados.reduce((s,e)=>s+(e.total||0),0),recLoja=venFiltrados.reduce((s,v)=>s+(v.receita||0),0);
+  const totalMin=atenFiltrados.reduce((s,a)=>s+(a.duracao||0),0),ticket=atenFiltrados.length?recAtend/atenFiltrados.length:0;
+  const aReceber=atenFiltrados.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
+  const labelPeriodo = mesFiltro ? `mês selecionado` : `${atenMes.length} este mês`;
   document.getElementById('statsGrid').innerHTML=`
-    <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atendimentos.length}</div><div class="stat-sub">${atenMes.length} este mês</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Atend.</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recAtend)}</div><div class="stat-sub">${fmtBRL(atenMes.reduce((s,a)=>s+(a.valor||0),0))} este mês</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${eventos.length} eventos</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(vendas.reduce((s,v)=>s+(v.lucro||0),0))}</div></div>
+    <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenFiltrados.length}</div><div class="stat-sub">${labelPeriodo}</div></div>
+    <div class="stat-card"><div class="stat-label">Receita Atend.</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recAtend)}</div><div class="stat-sub">${atenFiltrados.length} sessões</div></div>
+    <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${evsFiltrados.length} eventos</div></div>
+    <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(venFiltrados.reduce((s,v)=>s+(v.lucro||0),0))}</div></div>
     <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recAtend+recEvs+recLoja)}</div></div>
     <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticket)}</div><div class="stat-sub">por atendimento</div></div>
-    <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${totalMin?fmtBRL(recAtend/totalMin*60)+'/h':'—'}</div></div>`;
+    <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${totalMin?fmtBRL(recAtend/totalMin*60)+'/h':'—'}</div></div>
+    ${aReceber>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">🔴 A Receber</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(aReceber)}</div></div>`:''}`;
   const byServ={};
-  atendimentos.forEach(a=>{byServ[a.servicoId]=(byServ[a.servicoId]||0)+(a.valor||0);});
+  atenFiltrados.forEach(a=>{byServ[a.servicoId]=(byServ[a.servicoId]||0)+(a.valor||0);});
   const topServ=Object.entries(byServ).map(([id,r])=>({nome:servicos.find(x=>x.id===id)?.nome||'—',r})).sort((a,b)=>b.r-a.r).slice(0,7);
   if(chartReceita)chartReceita.destroy();
   chartReceita=new Chart(document.getElementById('chartReceita'),{type:'doughnut',data:{labels:topServ.map(s=>s.nome),datasets:[{data:topServ.map(s=>s.r),backgroundColor:['#C9A84C','#647746','#776b5f','#504840','#E2C97E','#8FA46A','#A07850'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
@@ -1350,15 +1466,15 @@ async function renderDashboard(){
   const meses=Object.keys(byMes).sort().slice(-8);
   if(chartMes)chartMes.destroy();
   chartMes=new Chart(document.getElementById('chartMes'),{type:'bar',data:{labels:meses.map(m=>{const[y,mo]=m.split('-');return new Date(y,mo-1).toLocaleString('pt-BR',{month:'short',year:'2-digit'});}),datasets:[{data:meses.map(m=>byMes[m]),backgroundColor:'rgba(100,119,70,.7)',borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{font:{family:'Jost',size:10},color:'#776b5f'}},y:{grid:{color:'rgba(226,217,204,.4)'},ticks:{font:{family:'Jost',size:10},color:'#776b5f'}}}}});
-  const byPag={};atendimentos.forEach(a=>{const p=a.pagamento||'Não inf.';byPag[p]=(byPag[p]||0)+1;});
-  const pagK=Object.keys(byPag),pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca','Não inf.':'Não informado'};
+  const byPag={};atenFiltrados.forEach(a=>{const p=a.pagamento||'Não inf.';byPag[p]=(byPag[p]||0)+1;});
+  const pagK=Object.keys(byPag),pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca','Não inf.':'Não informado',apagar:'🔴 A Pagar'};
   if(chartPagamento)chartPagamento.destroy();
-  chartPagamento=new Chart(document.getElementById('chartPagamento'),{type:'pie',data:{labels:pagK.map(k=>pagLbl[k]||k),datasets:[{data:pagK.map(k=>byPag[k]),backgroundColor:['#4CAF50','#2196F3','#FF9800','#9C27B0','#aaa'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
-  const byMod={};atendimentos.forEach(a=>{const m=a.modalidade||'Não inf.';byMod[m]=(byMod[m]||0)+1;});
+  chartPagamento=new Chart(document.getElementById('chartPagamento'),{type:'pie',data:{labels:pagK.map(k=>pagLbl[k]||k),datasets:[{data:pagK.map(k=>byPag[k]),backgroundColor:['#4CAF50','#2196F3','#FF9800','#9C27B0','#F44336','#aaa'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
+  const byMod={};atenFiltrados.forEach(a=>{const m=a.modalidade||'Não inf.';byMod[m]=(byMod[m]||0)+1;});
   const modK=Object.keys(byMod),modLbl={presencial:'🏠 Presencial',online:'💻 Online',wpp:'📱 WhatsApp','Não inf.':'Não informado'};
   if(chartModalidade)chartModalidade.destroy();
   chartModalidade=new Chart(document.getElementById('chartModalidade'),{type:'doughnut',data:{labels:modK.map(k=>modLbl[k]||k),datasets:[{data:modK.map(k=>byMod[k]),backgroundColor:['#647746','#4A7BB5','#2E7D32','#aaa'],borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{family:'Jost',size:10},color:'#776b5f',padding:10,boxWidth:12}}}}});
-  const servNomes=Object.entries(byServ).map(([id,r])=>{const aten=atendimentos.filter(a=>a.servicoId===id),min=aten.reduce((s,a)=>s+(a.duracao||0),0);return{nome:servicos.find(x=>x.id===id)?.nome||'—',r,count:aten.length,min};}).sort((a,b)=>b.r-a.r);
+  const servNomes=Object.entries(byServ).map(([id,r])=>{const aten=atenFiltrados.filter(a=>a.servicoId===id),min=aten.reduce((s,a)=>s+(a.duracao||0),0);return{nome:servicos.find(x=>x.id===id)?.nome||'—',r,count:aten.length,min};}).sort((a,b)=>b.r-a.r);
   document.getElementById('topReceita').innerHTML=servNomes.slice(0,5).length?servNomes.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">${fmtBRL(s.r)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
   const topT=servNomes.filter(s=>s.min>0).map(s=>({...s,rph:s.r/s.min*60})).sort((a,b)=>b.rph-a.rph);
   document.getElementById('topTempo').innerHTML=topT.slice(0,5).length?topT.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">R$ ${s.rph.toFixed(0)}/h</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
@@ -1464,104 +1580,18 @@ async function exportarCSV(){
 }
 
 
-// ── PARCELAMENTO EVENTOS ──
-function toggleEvParcelamento(){
-  const pag=getSeg('segEvPag');
-  const area=document.getElementById('evParcelamentoArea');
-  area.style.display=pag==='parcelado'?'block':'none';
-  if(pag!=='parcelado'){document.getElementById('evParcelasPreview').textContent='';}
-}
-
-function gerarParcelasPreview(){
-  const np=+document.getElementById('evNumParcelas').value||0;
-  const vtp=+document.getElementById('evTotalParcelas').value||0;
-  const prev=document.getElementById('evParcelasPreview');
-  if(np>=2&&vtp>0){
-    prev.innerHTML='<strong style="color:var(--brown);">'+np+'x de '+fmtBRL(vtp/np)+'</strong> = '+fmtBRL(vtp);
-  } else {
-    prev.textContent='Informe nº de parcelas e valor total.';
-  }
-}
-
-function parcelaBadge(parcelas){
-  if(!parcelas||!parcelas.length) return '';
-  const pagas=parcelas.filter(p=>p.pago).length,total=parcelas.length;
-  const pct=Math.round(pagas/total*100);
-  const cor=pagas===total?'var(--green)':pagas>0?'var(--gold)':'var(--red)';
-  return '<span style="color:'+cor+';font-size:.72rem;">📆 '+pagas+'/'+total+' parcelas</span>';
-}
-
+// ── PARCELAMENTO (legado - não usado) ──
+function toggleEvParcelamento(){}
+function gerarParcelasPreview(){}
+function parcelaBadge(){ return ''; }
 let _parcelasEventoId=null;
-async function abrirModalParcelas(eventoId){
-  _parcelasEventoId=eventoId;
-  const eventos=await dbGetAll('eventos');
-  const ev=eventos.find(x=>x.id===eventoId);
-  if(!ev)return;
-  document.getElementById('modalParcelasTitulo').textContent='Parcelas — '+ev.nome;
-  const parcelas=ev.parcelas||[];
-  const totalPago=parcelas.filter(p=>p.pago).reduce((s,p)=>s+(p.valor||0),0);
-  const totalPendente=parcelas.filter(p=>!p.pago).reduce((s,p)=>s+(p.valor||0),0);
-  let html=`<div style="display:flex;gap:1rem;margin-bottom:1rem;flex-wrap:wrap;">
-    <div class="stat-card" style="flex:1;padding:.75rem 1rem;"><div class="stat-label">Recebido</div><div class="stat-value" style="font-size:1.2rem;color:var(--green);">${fmtBRL(totalPago)}</div></div>
-    <div class="stat-card" style="flex:1;padding:.75rem 1rem;"><div class="stat-label">Pendente</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(totalPendente)}</div></div>
-  </div>
-  <div class="table-wrap"><table>
-    <thead><tr><th>Parcela</th><th>Valor</th><th>Status</th><th>Data Pag.</th><th></th></tr></thead>
-    <tbody id="tbodyParcelas"></tbody>
-  </table></div>`;
-  document.getElementById('modalParcelasConteudo').innerHTML=html;
-  renderTbodyParcelas(parcelas);
-  abrirModal('modalParcelas');
-}
-
-function renderTbodyParcelas(parcelas){
-  document.getElementById('tbodyParcelas').innerHTML=parcelas.map((p,i)=>`<tr>
-    <td style="font-weight:600;">Parcela ${p.num||i+1}</td>
-    <td>${fmtBRL(p.valor)}</td>
-    <td>${p.pago?'<span class="badge badge-green">✓ Pago</span>':'<span class="badge badge-gold">⏳ Pendente</span>'}</td>
-    <td><input type="date" value="${p.dataPagamento||''}" onchange="atualizarDataParcela(${i},this.value)" style="width:130px;font-size:.8rem;padding:.3rem .5rem;"></td>
-    <td><button class="btn btn-sm ${p.pago?'btn-danger':'btn-secondary'}" onclick="toggleParcela(${i})">${p.pago?'Desfazer':'✓ Marcar'}</button></td>
-  </tr>`).join('');
-}
+function abrirModalParcelas(){}
+function renderTbodyParcelas(){}
+async function toggleParcela(){}
+async function atualizarDataParcela(){}
+async function salvarParcelas(){ fecharModal('modalParcelas'); }
 
 let _parcelasTemp=null;
-async function abrirModalParcelasComCache(eventoId){
-  const eventos=await dbGetAll('eventos');
-  const ev=eventos.find(x=>x.id===eventoId);
-  _parcelasTemp=ev?JSON.parse(JSON.stringify(ev.parcelas||[])):[];
-}
-
-async function toggleParcela(idx){
-  const eventos=await dbGetAll('eventos');
-  const ev=eventos.find(x=>x.id===_parcelasEventoId);
-  if(!ev||!ev.parcelas)return;
-  ev.parcelas[idx].pago=!ev.parcelas[idx].pago;
-  if(ev.parcelas[idx].pago&&!ev.parcelas[idx].dataPagamento)
-    ev.parcelas[idx].dataPagamento=new Date().toISOString().slice(0,10);
-  renderTbodyParcelas(ev.parcelas);
-  // update totals
-  const totalPago=ev.parcelas.filter(p=>p.pago).reduce((s,p)=>s+(p.valor||0),0);
-  const totalPendente=ev.parcelas.filter(p=>!p.pago).reduce((s,p)=>s+(p.valor||0),0);
-  document.querySelector('#modalParcelasConteudo .stat-value:first-of-type').textContent=fmtBRL(totalPago);
-  // save immediately
-  await dbSave('eventos',ev);
-  toast('Parcela atualizada!');
-  renderEventos();
-}
-
-async function atualizarDataParcela(idx,date){
-  const eventos=await dbGetAll('eventos');
-  const ev=eventos.find(x=>x.id===_parcelasEventoId);
-  if(!ev||!ev.parcelas)return;
-  ev.parcelas[idx].dataPagamento=date;
-  await dbSave('eventos',ev);
-}
-
-async function salvarParcelas(){
-  toast('Parcelas salvas!');
-  fecharModal('modalParcelas');
-  renderEventos();
-}
 
 // ── SEED INICIAL ──
 async function seedInicial(){
