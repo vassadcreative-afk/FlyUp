@@ -560,7 +560,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
 
 <!-- MODAL PERFIL CLIENTE -->
 <div class="modal-overlay" id="modalPerfilCliente">
-  <div class="modal" style="max-width:700px;">
+  <div class="modal" style="max-width:800px;">
     <div id="modalPerfilConteudo"></div>
     <div class="flex-end gap-1 mt-3">
       <button class="btn btn-ghost" onclick="fecharModal('modalPerfilCliente')">Fechar</button>
@@ -1022,46 +1022,169 @@ async function abrirPerfilCliente(clienteId) {
   const atenCliente=atendimentos.filter(a=>a.clienteId===clienteId).sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
   const evsCliente=eventos.filter(e=>(e.participantes_lista||[]).some(p=>p.clienteId===clienteId));
   const vendasCliente=vendas.filter(v=>v.clienteId===clienteId).sort((a,b)=>b.data.localeCompare(a.data));
-  const totalGasto=atenCliente.reduce((s,a)=>s+(a.valor||0),0)
-    +evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p?+p.valor:0);},0)
-    +vendasCliente.reduce((s,v)=>s+(v.receita||0),0);
+
+  // ── Análises ──
+  const totalAten=atenCliente.reduce((s,a)=>s+(a.valor||0),0);
+  const totalEvs=evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p?+p.valor:0);},0);
+  const totalLoja=vendasCliente.reduce((s,v)=>s+(v.receita||0),0);
+  const totalGasto=totalAten+totalEvs+totalLoja;
   const devendo=atenCliente.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0)
     +evsCliente.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId);return s+(p&&p.pagamento==='apagar'?+p.valor:0);},0)
     +vendasCliente.filter(v=>v.pagamento==='apagar').reduce((s,v)=>s+(v.receita||0),0);
+  const totalMin=atenCliente.reduce((s,a)=>s+(a.duracao||0),0);
+  const ticketMedio=atenCliente.length?totalAten/atenCliente.length:0;
+
+  // Serviço preferido (mais frequente)
+  const byServ={};
+  atenCliente.forEach(a=>{byServ[a.servicoId]=(byServ[a.servicoId]||0)+1;});
+  const topServId=Object.entries(byServ).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const topServ=servicos.find(x=>x.id===topServId);
+
+  // Serviços únicos que fez
+  const servicosFeitos=[...new Set(atenCliente.map(a=>a.servicoId))].map(id=>servicos.find(x=>x.id===id)).filter(Boolean);
+
+  // Pagamento preferido
+  const byPag={};
+  atenCliente.forEach(a=>{if(a.pagamento&&a.pagamento!=='apagar')byPag[a.pagamento]=(byPag[a.pagamento]||0)+1;});
+  const topPagKey=Object.entries(byPag).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca'};
+
+  // Primeiro e último atendimento
+  const allDates=[...atenCliente.map(a=>a.data),...evsCliente.map(e=>e.data)].filter(Boolean).sort();
+  const primeiroContato=allDates[0], ultimoContato=allDates[allDates.length-1];
+  const diasCliente=primeiroContato?Math.floor((Date.now()-new Date(primeiroContato))/(86400000)):null;
+
+  // Frequência (média de dias entre atendimentos)
+  const datasAten=atenCliente.map(a=>a.data).filter(Boolean).sort();
+  let freqMedia=null;
+  if(datasAten.length>=2){
+    const diffs=[];
+    for(let i=1;i<datasAten.length;i++){diffs.push((new Date(datasAten[i])-new Date(datasAten[i-1]))/86400000);}
+    freqMedia=Math.round(diffs.reduce((s,d)=>s+d,0)/diffs.length);
+  }
+
+  // Modalidade preferida
+  const byMod={};
+  atenCliente.forEach(a=>{if(a.modalidade)byMod[a.modalidade]=(byMod[a.modalidade]||0)+1;});
+  const topModKey=Object.entries(byMod).sort((a,b)=>b[1]-a[1])[0]?.[0];
+  const modLbl={presencial:'🏠 Presencial',online:'💻 Online',wpp:'📱 WhatsApp'};
+
+  // Linha do tempo combinada (atend + eventos + vendas)
+  const timeline=[
+    ...atenCliente.map(a=>({data:a.data,hora:a.hora||'',tipo:'aten',label:servicos.find(x=>x.id===a.servicoId)?.nome||'—',valor:a.valor,pag:a.pagamento,cor:servicos.find(x=>x.id===a.servicoId)?.cor||'badge-green'})),
+    ...evsCliente.map(e=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};return{data:e.data,hora:'',tipo:'evento',label:e.nome,valor:+p.valor||0,pag:p.pagamento,cor:'badge-purple'};}),
+    ...vendasCliente.map(v=>{const pr=produtos.find(x=>x.id===v.prodId);return{data:v.data,hora:'',tipo:'loja',label:pr?.nome||'—',valor:v.receita,pag:v.pagamento,cor:'badge-brown'};})
+  ].sort((a,b)=>(b.data+b.hora).localeCompare(a.data+a.hora));
+
   const wppNum=c.wpp?c.wpp.replace(/\D/g,''):'';
   const initials=(c.nome||'?').split(' ').slice(0,2).map(w=>w[0]).join('').toUpperCase();
   const idade=c.nasc?Math.floor((Date.now()-new Date(c.nasc))/(365.25*24*3600*1000)):null;
+
+  const tipoIcon={aten:'✦',evento:'⭐',loja:'🛍'};
+
   let html=`
-    <div style="display:flex;gap:1rem;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;">
-      <div class="cliente-avatar" style="width:56px;height:56px;font-size:1.5rem;">${initials}</div>
-      <div style="flex:1;">
+    <!-- Cabeçalho -->
+    <div style="display:flex;gap:1rem;align-items:flex-start;margin-bottom:1rem;flex-wrap:wrap;">
+      <div class="cliente-avatar" style="width:56px;height:56px;font-size:1.5rem;flex-shrink:0;">${initials}</div>
+      <div style="flex:1;min-width:160px;">
         <div style="font-family:'Cormorant Garamond',serif;font-size:1.6rem;color:var(--green);font-weight:300;">${c.nome}</div>
-        <div style="font-size:.8rem;color:var(--taupe);margin-top:.2rem;">${c.cidade?`📍 ${c.cidade} · `:''}${idade!==null?`${idade} anos`:''}</div>
+        <div style="font-size:.8rem;color:var(--taupe);margin-top:.15rem;">${c.cidade?`📍 ${c.cidade}  ·  `:''}${idade!==null?`${idade} anos`:''}</div>
         <div style="font-size:.8rem;color:var(--taupe);">${c.wpp?`📱 ${c.wpp}  `:''}${c.email?`✉️ ${c.email}`:''}</div>
-      </div>
-      <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;">
-        ${c.wpp?`<a href="https://wa.me/55${wppNum}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;">📱 WhatsApp</a>`:''}
-        <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
-        <button class="btn btn-danger" onclick="excluirCliente('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">🗑 Excluir</button>
+        ${primeiroContato?`<div style="font-size:.75rem;color:var(--taupe);margin-top:.2rem;">Cliente desde ${fmtDate(primeiroContato)}${diasCliente!==null?` · ${diasCliente} dias`:''}</div>`:''}
       </div>
     </div>
-    <div class="stats-grid" style="margin-bottom:1.5rem;">
-      <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenCliente.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Eventos</div><div class="stat-value">${evsCliente.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Compras Loja</div><div class="stat-value">${vendasCliente.length}</div></div>
-      <div class="stat-card"><div class="stat-label">Total Gasto</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(totalGasto)}</div></div>
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);">
+      ${c.wpp?`<a href="https://wa.me/55${wppNum}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;font-weight:600;">📱 WhatsApp</a>`:''}
+      <button class="btn btn-ghost btn-sm" onclick="fecharModal('modalPerfilCliente');abrirModalCliente('${c.id}')">✏️ Editar</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto;" onclick="excluirCliente('${c.id}','${(c.nome||'').replace(/'/g,"\\'")}')">🗑️ Excluir</button>
+    </div>
+
+    <!-- KPIs -->
+    <div class="stats-grid" style="margin-bottom:1.25rem;">
+      <div class="stat-card"><div class="stat-label">Total Investido</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(totalGasto)}</div><div class="stat-sub">${atenCliente.length} atend. · ${evsCliente.length} eventos · ${vendasCliente.length} compras</div></div>
+      <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticketMedio)}</div><div class="stat-sub">por atendimento</div></div>
+      <div class="stat-card"><div class="stat-label">Horas em Sessão</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${totalMin} min no total</div></div>
+      ${freqMedia!==null?`<div class="stat-card"><div class="stat-label">Frequência</div><div class="stat-value" style="font-size:1.2rem;">~${freqMedia}d</div><div class="stat-sub">entre atendimentos</div></div>`:''}
       ${devendo>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">⚠️ A Pagar</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(devendo)}</div></div>`:''}
-    </div>`;
-  if(c.obs) html+=`<div class="card mb-3" style="padding:.75rem 1rem;"><div style="font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:var(--taupe);margin-bottom:.3rem;">Observações</div><div style="font-size:.88rem;">${c.obs}</div></div>`;
-  if(atenCliente.length) html+=`<div class="card mb-3"><div class="card-title">Atendimentos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Serviço</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
-    ${atenCliente.slice(0,10).map(a=>{const s=servicos.find(x=>x.id===a.servicoId);return`<tr><td style="font-size:.8rem;">${fmtDate(a.data)}</td><td><span class="badge ${s?.cor||'badge-green'}">${s?.nome||'—'}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(a.valor)}</td><td>${payBadge(a.pagamento)}</td></tr>`;}).join('')}
-  </tbody></table></div></div>`;
-  if(evsCliente.length) html+=`<div class="card mb-3"><div class="card-title">Eventos</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Evento</th><th>Tipo</th><th>Valor</th><th>Pag.</th></tr></thead><tbody>
-    ${evsCliente.map(e=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};return`<tr><td style="font-size:.8rem;">${fmtDate(e.data)}</td><td>${e.nome}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor||0)}</td><td>${payBadge(p.pagamento)}</td></tr>`;}).join('')}
-  </tbody></table></div></div>`;
-  if(vendasCliente.length) html+=`<div class="card mb-3"><div class="card-title">Compras na Loja</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Produto</th><th>Qtd</th><th>Total</th><th>Pag.</th></tr></thead><tbody>
-    ${vendasCliente.map(v=>{const p=produtos.find(x=>x.id===v.prodId);return`<tr><td style="font-size:.8rem;">${fmtDate(v.data)}</td><td>${p?.nome||'—'}</td><td>${v.qtd}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(v.receita)}</td><td>${payBadge(v.pagamento)}</td></tr>`;}).join('')}
-  </tbody></table></div></div>`;
+    </div>
+
+    <!-- Mini Relatório -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;">
+      <div class="card" style="padding:1rem;">
+        <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.75rem;">⭐ Perfil da Cliente</div>
+        ${topServ?`<div style="margin-bottom:.5rem;"><div style="font-size:.68rem;color:var(--taupe);margin-bottom:.2rem;">Serviço preferido</div><span class="badge ${topServ.cor||'badge-green'}">${topServ.nome}</span> <span style="font-size:.72rem;color:var(--taupe);">(${byServ[topServId]}x)</span></div>`:''}
+        ${topPagKey?`<div style="margin-bottom:.5rem;"><div style="font-size:.68rem;color:var(--taupe);margin-bottom:.2rem;">Pagamento usual</div><span style="font-size:.82rem;font-weight:500;">${pagLbl[topPagKey]||topPagKey}</span></div>`:''}
+        ${topModKey?`<div style="margin-bottom:.5rem;"><div style="font-size:.68rem;color:var(--taupe);margin-bottom:.2rem;">Modalidade</div><span style="font-size:.82rem;font-weight:500;">${modLbl[topModKey]||topModKey}</span></div>`:''}
+        ${ultimoContato?`<div><div style="font-size:.68rem;color:var(--taupe);margin-bottom:.2rem;">Último contato</div><span style="font-size:.82rem;font-weight:500;">${fmtDate(ultimoContato)}</span></div>`:''}
+      </div>
+      <div class="card" style="padding:1rem;">
+        <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.75rem;">🛤 Jornada</div>
+        <div style="display:flex;gap:.5rem;margin-bottom:.4rem;flex-wrap:wrap;">
+          <div style="text-align:center;flex:1;background:var(--green-pale);border-radius:6px;padding:.5rem;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:var(--green);">${atenCliente.length}</div>
+            <div style="font-size:.62rem;color:var(--taupe);text-transform:uppercase;letter-spacing:.08em;">Sessões</div>
+          </div>
+          <div style="text-align:center;flex:1;background:var(--gold-pale);border-radius:6px;padding:.5rem;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:#8B6914;">${evsCliente.length}</div>
+            <div style="font-size:.62rem;color:var(--taupe);text-transform:uppercase;letter-spacing:.08em;">Eventos</div>
+          </div>
+          <div style="text-align:center;flex:1;background:#EDE8E3;border-radius:6px;padding:.5rem;">
+            <div style="font-family:'Cormorant Garamond',serif;font-size:1.4rem;color:var(--brown);">${vendasCliente.length}</div>
+            <div style="font-size:.62rem;color:var(--taupe);text-transform:uppercase;letter-spacing:.08em;">Compras</div>
+          </div>
+        </div>
+        ${totalAten>0?`<div style="margin-top:.5rem;font-size:.75rem;color:var(--taupe);">Sessões: <strong style="color:var(--green);">${fmtBRL(totalAten)}</strong>${totalEvs>0?`  ·  Eventos: <strong style="color:#8B6914;">${fmtBRL(totalEvs)}</strong>`:''}${totalLoja>0?`  ·  Loja: <strong style="color:var(--brown);">${fmtBRL(totalLoja)}</strong>`:''}</div>`:''}
+      </div>
+    </div>
+
+    ${servicosFeitos.length?`
+    <!-- Serviços realizados -->
+    <div class="card mb-3" style="padding:1rem;">
+      <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.75rem;">✦ Serviços Realizados</div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap;">
+        ${servicosFeitos.map(s=>`<span class="badge ${s.cor||'badge-green'}" style="margin-bottom:.25rem;">${s.nome} <span style="opacity:.7;">(${byServ[s.id]}x)</span></span>`).join('')}
+      </div>
+    </div>`:''}
+
+    ${evsCliente.length?`
+    <!-- Eventos/Cursos -->
+    <div class="card mb-3" style="padding:1rem;">
+      <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.75rem;">📚 Cursos & Eventos</div>
+      ${evsCliente.map(e=>{
+        const p=(e.participantes_lista||[]).find(p=>p.clienteId===clienteId)||{};
+        const tipoLbl={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
+        return`<div style="display:flex;align-items:center;gap:.75rem;padding:.45rem 0;border-bottom:1px solid rgba(226,217,204,.4);">
+          <span style="font-size:.72rem;color:var(--taupe);white-space:nowrap;">${fmtDate(e.data)}</span>
+          <span class="badge badge-purple">${tipoLbl[e.tipo]||e.tipo}</span>
+          <span style="flex:1;font-size:.85rem;font-weight:500;">${e.nome}</span>
+          <span style="font-size:.82rem;font-weight:600;color:var(--green);">${fmtBRL(p.valor||0)}</span>
+          ${payBadge(p.pagamento)}
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    ${c.obs?`
+    <div class="card mb-3" style="padding:.85rem 1rem;background:var(--gold-pale);border-color:var(--gold-light);">
+      <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.4rem;">📝 Observações</div>
+      <div style="font-size:.88rem;color:var(--text);">${c.obs}</div>
+    </div>`:''}
+
+    <!-- Linha do tempo completa -->
+    ${timeline.length?`
+    <div class="card" style="padding:1rem;">
+      <div style="font-size:.65rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin-bottom:.75rem;">🕐 Histórico Completo</div>
+      <div style="max-height:320px;overflow-y:auto;">
+        ${timeline.map(t=>`
+        <div style="display:flex;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid rgba(226,217,204,.35);">
+          <span style="font-size:.72rem;color:var(--taupe);white-space:nowrap;min-width:70px;">${fmtDate(t.data)}</span>
+          <span style="font-size:.78rem;opacity:.6;width:16px;text-align:center;">${tipoIcon[t.tipo]}</span>
+          <span class="badge ${t.cor}" style="flex-shrink:0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.label}</span>
+          <span style="margin-left:auto;font-size:.82rem;font-weight:600;color:var(--green);white-space:nowrap;">${fmtBRL(t.valor)}</span>
+          ${payBadge(t.pag)}
+        </div>`).join('')}
+      </div>
+    </div>`:''}`;
+
   document.getElementById('modalPerfilConteudo').innerHTML=html;
   abrirModal('modalPerfilCliente');
 }
