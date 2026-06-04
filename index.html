@@ -530,6 +530,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <div id="modalDetalheEventoConteudo"></div>
     <div class="flex-end gap-1 mt-3">
       <button class="btn btn-ghost" onclick="fecharModal('modalDetalheEvento')">Fechar</button>
+      <button class="btn btn-secondary" id="btnEditarDetalheEvento" onclick="">✏️ Editar Evento</button>
     </div>
   </div>
 </div>
@@ -1372,7 +1373,29 @@ function abrirModalEvento() {
   document.getElementById('evTotalPago').textContent='';
   document.getElementById('evTotalAPagar').textContent='';
   document.getElementById('evEditId').value='';
+  document.getElementById('modalEventoTitulo').textContent='Registrar Evento';
   document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
+  renderEvParticipantes();
+  abrirModal('modalEvento');
+}
+
+async function editarEvento(id) {
+  const eventos = await dbGetAll('eventos');
+  const e = eventos.find(x=>x.id===id); if(!e) return;
+  _evParticipantes = (e.participantes_lista||[]).map(p=>({
+    clienteId: p.clienteId||'',
+    clienteNome: p.clienteNome||'',
+    valor: +p.valor||0,
+    pagamento: p.pagamento||'pix'
+  }));
+  document.getElementById('evEditId').value = e.id;
+  document.getElementById('modalEventoTitulo').textContent = 'Editar Evento';
+  document.getElementById('evNome').value = e.nome||'';
+  document.getElementById('evDuracao').value = e.duracao||'';
+  document.getElementById('evData').value = e.data||'';
+  document.getElementById('evObs').value = e.obs||'';
+  document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
+  if(e.tipo) setSeg('segEvTipo', e.tipo);
   renderEvParticipantes();
   abrirModal('modalEvento');
 }
@@ -1437,10 +1460,13 @@ async function salvarEvento() {
   const duracao=+document.getElementById('evDuracao').value||0, obs=document.getElementById('evObs').value.trim();
   const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
   const participantes_lista=_evParticipantes.map(p=>({clienteId:p.clienteId||null,clienteNome:p.clienteNome||'',valor:+p.valor||0,pagamento:p.pagamento||'pix'}));
+  const editId=document.getElementById('evEditId').value;
+  const evento={tipo,nome,data,duracao,participantes:participantes_lista.length,total,obs,participantes_lista};
+  if(editId) evento.id=editId;
   showLoading();
-  await dbSave('eventos',{tipo,nome,data,duracao,participantes:participantes_lista.length,total,obs,participantes_lista});
+  await dbSave('eventos',evento);
   hideLoading();
-  fecharModal('modalEvento'); renderEventos(); toast('Evento registrado!');
+  fecharModal('modalEvento'); renderEventos(); toast(editId?'Evento atualizado!':'Evento registrado!');
 }
 async function renderEventos() {
   showLoading(); const eventos=await dbGetAll('eventos'); hideLoading();
@@ -1460,8 +1486,10 @@ async function renderEventos() {
     <td style="font-size:.82rem;">${e.participantes||lista.length} pessoas</td>
     <td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td>
     <td>${statusPag}</td>
-    <td></td>
-    <td><button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button></td>
+    <td class="tag-actions">
+      <button class="btn btn-ghost btn-sm" onclick="editarEvento('${e.id}')">✏️ Editar</button>
+      <button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button>
+    </td>
   </tr>`;}).join('');
 }
 
@@ -1471,6 +1499,7 @@ async function abrirDetalheEvento(id){
   const lista=e.participantes_lista||[];
   const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
   document.getElementById('modalDetalheEventoTitulo').textContent=e.nome;
+  document.getElementById('btnEditarDetalheEvento').onclick=()=>{fecharModal('modalDetalheEvento');editarEvento(id);};
   document.getElementById('modalDetalheEventoConteudo').innerHTML=`
     <div style="font-size:.82rem;color:var(--taupe);margin-bottom:1rem;">${tipoLabel[e.tipo]||e.tipo} · ${fmtDate(e.data)}${e.duracao?' · '+e.duracao+'min':''}</div>
     ${lista.length?`<div class="table-wrap"><table><thead><tr><th>Participante</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
