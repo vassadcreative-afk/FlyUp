@@ -71,6 +71,8 @@ textarea{resize:vertical;min-height:70px;}
 .btn-ghost:hover{border-color:var(--gold);color:var(--gold);}
 .btn-danger{background:none;color:var(--red);border:1px solid rgba(184,84,80,.3);font-size:.7rem;padding:.4rem .8rem;}
 .btn-danger:hover{background:var(--red);color:var(--white);}
+.btn-quitar{background:var(--green);color:var(--white);border:none;font-size:.65rem;padding:.35rem .8rem;font-weight:600;letter-spacing:.08em;}
+.btn-quitar:hover{background:var(--green-dark);}
 .btn-sm{padding:.4rem .9rem;font-size:.68rem;}
 .table-wrap{overflow-x:auto;}
 table{width:100%;border-collapse:collapse;font-size:.87rem;}
@@ -83,6 +85,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
 .badge-brown{background:#EDE8E3;color:var(--brown);}
 .badge-blue{background:#EAF0F8;color:var(--blue);}
 .badge-purple{background:#F0EAF8;color:var(--purple);}
+.badge-red{background:#FDECEA;color:#B71C1C;}
 .pay-pix{background:#E8F5E9;color:#2E7D32;}
 .pay-cartao{background:#E3F2FD;color:#1565C0;}
 .pay-dinheiro{background:#FFF8E1;color:#E65100;}
@@ -142,6 +145,8 @@ tr:hover td{background:rgba(245,237,214,.2);}
 .mt-1{margin-top:.5rem;}.mt-2{margin-top:1rem;}.mt-3{margin-top:1.5rem;}.mb-2{margin-bottom:1rem;}.mb-3{margin-bottom:1.5rem;}
 .tag-actions{display:flex;gap:.5rem;}
 .section-lbl{font-size:.68rem;letter-spacing:.12em;text-transform:uppercase;color:var(--taupe);font-weight:600;margin:.5rem 0;}
+.pendencia-row{display:flex;align-items:center;gap:.6rem;padding:.5rem .25rem;border-bottom:1px solid rgba(226,217,204,.4);flex-wrap:wrap;}
+.pendencia-row:last-child{border-bottom:none;}
 @media(max-width:900px){.charts-grid,.two-col-grid{grid-template-columns:1fr;}.stats-grid{grid-template-columns:repeat(2,1fr);}}
 @media(max-width:640px){header{padding:0 1rem;height:58px;}main{padding:1rem;}nav{display:none;}.hamburger{display:flex;}.mobile-nav{top:58px;}.stats-grid{grid-template-columns:1fr 1fr;gap:.75rem;}.form-grid-2,.form-grid-3{grid-template-columns:1fr;}.filter-bar{flex-direction:column;align-items:stretch;}.filter-bar input,.filter-bar select{width:100%;min-width:unset;}.page-title{font-size:1.5rem;}.stat-value{font-size:1.5rem;}.card{padding:1rem;}.cal-day{min-height:48px;padding:.25rem;}.cal-event-dot{display:none;}.cal-day.has-events::after{content:'●';display:block;font-size:.5rem;color:var(--gold);text-align:center;}.modal{padding:1.25rem;max-width:calc(100vw - 2rem);}#toast{right:1rem;left:1rem;text-align:center;}}
 @media(max-width:380px){.stats-grid{grid-template-columns:1fr;}}
@@ -191,6 +196,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <button class="nav-btn" onclick="goTo('registro')">Registrar</button>
     <button class="nav-btn" onclick="goTo('eventos')">Eventos</button>
     <button class="nav-btn" onclick="goTo('historico')">Histórico</button>
+    <button class="nav-btn" onclick="goTo('saidas')">Saídas</button>
     <button class="nav-btn" onclick="goTo('loja')">Loja</button>
     <button class="nav-btn" onclick="goTo('servicos')">Serviços</button>
     <button class="nav-btn" onclick="goTo('relatorio')">Relatório</button>
@@ -211,6 +217,7 @@ tr:hover td{background:rgba(245,237,214,.2);}
   <button class="nav-btn" onclick="goTo('registro');closeMobileNav()">Registrar</button>
   <button class="nav-btn" onclick="goTo('eventos');closeMobileNav()">Eventos</button>
   <button class="nav-btn" onclick="goTo('historico');closeMobileNav()">Histórico</button>
+  <button class="nav-btn" onclick="goTo('saidas');closeMobileNav()">Saídas</button>
   <button class="nav-btn" onclick="goTo('loja');closeMobileNav()">Loja</button>
   <button class="nav-btn" onclick="goTo('servicos');closeMobileNav()">Serviços</button>
   <button class="nav-btn" onclick="goTo('relatorio');closeMobileNav()">Relatório</button>
@@ -398,6 +405,29 @@ tr:hover td{background:rgba(245,237,214,.2);}
   </div>
 </div>
 
+<!-- SAÍDAS -->
+<div class="page" id="page-saidas">
+  <div class="flex-between mb-3">
+    <div><h1 class="page-title">Saídas</h1><p class="page-subtitle">Despesas fixas, específicas, eventos, viagens e estrutura</p></div>
+    <button class="btn btn-primary" onclick="abrirModalSaida()">+ Nova Saída</button>
+  </div>
+  <div class="stats-grid" id="saidasStatsGrid"></div>
+  <div class="filter-bar">
+    <input type="text" id="filtroSaidaTexto" placeholder="Buscar descrição..." oninput="renderSaidas()" style="min-width:200px;">
+    <select id="filtroSaidaTag" onchange="renderSaidas()"><option value="">Todas as tags</option></select>
+    <input type="month" id="filtroSaidaMes" onchange="renderSaidas()">
+    <button class="btn btn-ghost btn-sm" onclick="limparFiltrosSaida()">Limpar</button>
+  </div>
+  <div class="card">
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Tag</th><th>Valor</th><th>Obs.</th><th></th></tr></thead>
+        <tbody id="tbodySaidas"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <!-- LOJA -->
 <div class="page" id="page-loja">
   <div class="flex-between mb-3">
@@ -530,7 +560,6 @@ tr:hover td{background:rgba(245,237,214,.2);}
     <div id="modalDetalheEventoConteudo"></div>
     <div class="flex-end gap-1 mt-3">
       <button class="btn btn-ghost" onclick="fecharModal('modalDetalheEvento')">Fechar</button>
-      <button class="btn btn-secondary" id="btnEditarDetalheEvento" onclick="">✏️ Editar Evento</button>
     </div>
   </div>
 </div>
@@ -680,6 +709,65 @@ tr:hover td{background:rgba(245,237,214,.2);}
   </div>
 </div>
 
+<!-- MODAL SAÍDA -->
+<div class="modal-overlay" id="modalSaida">
+  <div class="modal">
+    <div class="modal-title" id="modalSaidaTitulo">Nova Saída</div>
+    <input type="hidden" id="mSaidaId">
+    <div class="form-grid">
+      <div class="form-group"><label>Descrição</label><input type="text" id="mSaidaDesc" placeholder="Ex: Aluguel da sala, passagem, buffet do evento..."></div>
+      <div class="form-grid form-grid-2">
+        <div class="form-group"><label>Valor (R$)</label><input type="number" id="mSaidaValor" step="0.01" min="0" placeholder="0,00"></div>
+        <div class="form-group"><label>Data</label><input type="date" id="mSaidaData"></div>
+      </div>
+      <div class="form-group">
+        <label>Tag</label>
+        <div style="display:flex;gap:.5rem;">
+          <select id="mSaidaTag" style="flex:1;" onchange="if(this.value==='__nova__'){document.getElementById('mSaidaTagNova').style.display='block';}else{document.getElementById('mSaidaTagNova').style.display='none';}">
+            <option value="Eventos">Eventos</option>
+            <option value="Viagens">Viagens</option>
+            <option value="Estrutura">Estrutura</option>
+            <option value="Marketing">Marketing</option>
+            <option value="Fixas">Despesas Fixas</option>
+            <option value="Outros">Outros</option>
+            <option value="__nova__">+ Criar nova tag...</option>
+          </select>
+        </div>
+        <input type="text" id="mSaidaTagNova" placeholder="Nome da nova tag" style="display:none;margin-top:.5rem;">
+      </div>
+      <div class="form-group"><label>Observações</label><textarea id="mSaidaObs" placeholder="Detalhes adicionais..."></textarea></div>
+    </div>
+    <div class="flex-end gap-1 mt-3">
+      <button class="btn btn-ghost" onclick="fecharModal('modalSaida')">Cancelar</button>
+      <button class="btn btn-primary" onclick="salvarSaida()">Salvar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL QUITAR PENDÊNCIA -->
+<div class="modal-overlay" id="modalQuitar">
+  <div class="modal" style="max-width:420px;">
+    <div class="modal-title">Quitar Pendência</div>
+    <div id="modalQuitarResumo" style="font-size:.88rem;color:var(--text);margin-bottom:1rem;padding:.75rem 1rem;background:var(--cream);border-radius:8px;"></div>
+    <input type="hidden" id="quitarTipo">
+    <input type="hidden" id="quitarId">
+    <input type="hidden" id="quitarExtra">
+    <div class="form-group">
+      <label>Como foi recebido?</label>
+      <div class="seg-group" id="segQuitarPag">
+        <button type="button" class="seg-btn" data-val="pix" onclick="setSeg('segQuitarPag','pix')">💠 PIX</button>
+        <button type="button" class="seg-btn" data-val="cartao" onclick="setSeg('segQuitarPag','cartao')">💳 Cartão</button>
+        <button type="button" class="seg-btn" data-val="dinheiro" onclick="setSeg('segQuitarPag','dinheiro')">💵 Dinheiro</button>
+        <button type="button" class="seg-btn" data-val="troca" onclick="setSeg('segQuitarPag','troca')">🤝 Troca</button>
+      </div>
+    </div>
+    <div class="flex-end gap-1 mt-3">
+      <button class="btn btn-ghost" onclick="fecharModal('modalQuitar')">Cancelar</button>
+      <button class="btn btn-primary" onclick="confirmarQuitar()">✓ Confirmar Quitação</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script>
@@ -773,6 +861,7 @@ async function logout() {
 
 async function iniciarApp() {
   await seedInicial();
+  await migrarPrecos2026();
   await populateServicoSelects();
   await carregarClientes();
   initRegistro();
@@ -886,6 +975,7 @@ function goTo(page) {
   if (page==='eventos')    renderEventos();
   if (page==='loja')       renderLoja();
   if (page==='clientes')   renderClientes();
+  if (page==='saidas')     renderSaidas();
 }
 
 // ── CLIENTES ──
@@ -1373,29 +1463,7 @@ function abrirModalEvento() {
   document.getElementById('evTotalPago').textContent='';
   document.getElementById('evTotalAPagar').textContent='';
   document.getElementById('evEditId').value='';
-  document.getElementById('modalEventoTitulo').textContent='Registrar Evento';
   document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
-  renderEvParticipantes();
-  abrirModal('modalEvento');
-}
-
-async function editarEvento(id) {
-  const eventos = await dbGetAll('eventos');
-  const e = eventos.find(x=>x.id===id); if(!e) return;
-  _evParticipantes = (e.participantes_lista||[]).map(p=>({
-    clienteId: p.clienteId||'',
-    clienteNome: p.clienteNome||'',
-    valor: +p.valor||0,
-    pagamento: p.pagamento||'pix'
-  }));
-  document.getElementById('evEditId').value = e.id;
-  document.getElementById('modalEventoTitulo').textContent = 'Editar Evento';
-  document.getElementById('evNome').value = e.nome||'';
-  document.getElementById('evDuracao').value = e.duracao||'';
-  document.getElementById('evData').value = e.data||'';
-  document.getElementById('evObs').value = e.obs||'';
-  document.querySelectorAll('#segEvTipo .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
-  if(e.tipo) setSeg('segEvTipo', e.tipo);
   renderEvParticipantes();
   abrirModal('modalEvento');
 }
@@ -1460,13 +1528,10 @@ async function salvarEvento() {
   const duracao=+document.getElementById('evDuracao').value||0, obs=document.getElementById('evObs').value.trim();
   const total=_evParticipantes.reduce((s,p)=>s+(+p.valor||0),0);
   const participantes_lista=_evParticipantes.map(p=>({clienteId:p.clienteId||null,clienteNome:p.clienteNome||'',valor:+p.valor||0,pagamento:p.pagamento||'pix'}));
-  const editId=document.getElementById('evEditId').value;
-  const evento={tipo,nome,data,duracao,participantes:participantes_lista.length,total,obs,participantes_lista};
-  if(editId) evento.id=editId;
   showLoading();
-  await dbSave('eventos',evento);
+  await dbSave('eventos',{tipo,nome,data,duracao,participantes:participantes_lista.length,total,obs,participantes_lista});
   hideLoading();
-  fecharModal('modalEvento'); renderEventos(); toast(editId?'Evento atualizado!':'Evento registrado!');
+  fecharModal('modalEvento'); renderEventos(); toast('Evento registrado!');
 }
 async function renderEventos() {
   showLoading(); const eventos=await dbGetAll('eventos'); hideLoading();
@@ -1486,10 +1551,8 @@ async function renderEventos() {
     <td style="font-size:.82rem;">${e.participantes||lista.length} pessoas</td>
     <td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td>
     <td>${statusPag}</td>
-    <td class="tag-actions">
-      <button class="btn btn-ghost btn-sm" onclick="editarEvento('${e.id}')">✏️ Editar</button>
-      <button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button>
-    </td>
+    <td></td>
+    <td><button class="btn btn-danger" onclick="excluirEvento('${e.id}')">✕</button></td>
   </tr>`;}).join('');
 }
 
@@ -1499,11 +1562,10 @@ async function abrirDetalheEvento(id){
   const lista=e.participantes_lista||[];
   const tipoLabel={curso:'📚 Curso',vivencia:'🌿 Vivência',constelacao:'⭐ Constelação'};
   document.getElementById('modalDetalheEventoTitulo').textContent=e.nome;
-  document.getElementById('btnEditarDetalheEvento').onclick=()=>{fecharModal('modalDetalheEvento');editarEvento(id);};
   document.getElementById('modalDetalheEventoConteudo').innerHTML=`
     <div style="font-size:.82rem;color:var(--taupe);margin-bottom:1rem;">${tipoLabel[e.tipo]||e.tipo} · ${fmtDate(e.data)}${e.duracao?' · '+e.duracao+'min':''}</div>
-    ${lista.length?`<div class="table-wrap"><table><thead><tr><th>Participante</th><th>Valor</th><th>Pagamento</th></tr></thead><tbody>
-      ${lista.map(p=>`<tr><td>${p.clienteNome||'<em style="color:var(--taupe);">Avulso</em>'}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor)}</td><td>${payBadge(p.pagamento)}</td></tr>`).join('')}
+    ${lista.length?`<div class="table-wrap"><table><thead><tr><th>Participante</th><th>Valor</th><th>Pagamento</th><th></th></tr></thead><tbody>
+      ${lista.map((p,i)=>`<tr><td>${p.clienteNome||'<em style="color:var(--taupe);">Avulso</em>'}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(p.valor)}</td><td>${payBadge(p.pagamento)}</td><td>${p.pagamento==='apagar'?`<button class="btn btn-quitar btn-sm" onclick="abrirQuitar('evento','${e.id}',${i})">Quitar</button>`:''}</td></tr>`).join('')}
     </tbody></table></div>
     <div style="text-align:right;margin-top:.75rem;font-weight:600;color:var(--green);">Total: ${fmtBRL(e.total)}</div>`
     :'<p style="color:var(--taupe);">Sem participantes registrados.</p>'}
@@ -1612,10 +1674,188 @@ async function renderLoja(){
   }).join('');
 }
 
+// ── SAÍDAS ──
+async function populateSaidaTagFilter() {
+  const saidas = await dbGetAll('saidas');
+  const tagsPadrao = ['Eventos','Viagens','Estrutura','Marketing','Fixas','Outros'];
+  const tagsExtras = [...new Set(saidas.map(s=>s.tag).filter(t=>t && !tagsPadrao.includes(t)))];
+  const todas = [...tagsPadrao, ...tagsExtras];
+  const sel = document.getElementById('filtroSaidaTag');
+  const atual = sel.value;
+  sel.innerHTML = '<option value="">Todas as tags</option>' + todas.map(t=>`<option value="${t}">${t}</option>`).join('');
+  sel.value = atual;
+}
+
+function tagBadgeSaida(tag) {
+  const cores = {Eventos:'badge-purple',Viagens:'badge-blue',Estrutura:'badge-brown',Marketing:'badge-gold',Fixas:'badge-red',Outros:'badge-green'};
+  return `<span class="badge ${cores[tag]||'badge-green'}">${tag||'—'}</span>`;
+}
+
+function abrirModalSaida(id) {
+  document.getElementById('modalSaidaTitulo').textContent = id ? 'Editar Saída' : 'Nova Saída';
+  document.getElementById('mSaidaId').value = id||'';
+  document.getElementById('mSaidaDesc').value='';
+  document.getElementById('mSaidaValor').value='';
+  document.getElementById('mSaidaData').value=new Date().toISOString().split('T')[0];
+  document.getElementById('mSaidaTag').value='Eventos';
+  document.getElementById('mSaidaTagNova').value='';
+  document.getElementById('mSaidaTagNova').style.display='none';
+  document.getElementById('mSaidaObs').value='';
+  if (id) dbGetAll('saidas').then(list=>{
+    const s=list.find(x=>x.id===id); if(!s) return;
+    document.getElementById('mSaidaDesc').value=s.descricao||'';
+    document.getElementById('mSaidaValor').value=s.valor||'';
+    document.getElementById('mSaidaData').value=s.data||'';
+    document.getElementById('mSaidaObs').value=s.obs||'';
+    const tagsPadrao = ['Eventos','Viagens','Estrutura','Marketing','Fixas','Outros'];
+    if (tagsPadrao.includes(s.tag)) {
+      document.getElementById('mSaidaTag').value = s.tag;
+    } else {
+      document.getElementById('mSaidaTag').value = '__nova__';
+      document.getElementById('mSaidaTagNova').style.display='block';
+      document.getElementById('mSaidaTagNova').value = s.tag||'';
+    }
+  });
+  abrirModal('modalSaida');
+}
+
+async function salvarSaida() {
+  const id=document.getElementById('mSaidaId').value;
+  const descricao=document.getElementById('mSaidaDesc').value.trim();
+  const valor=+document.getElementById('mSaidaValor').value;
+  const data=document.getElementById('mSaidaData').value;
+  let tag=document.getElementById('mSaidaTag').value;
+  if (tag==='__nova__') tag = document.getElementById('mSaidaTagNova').value.trim() || 'Outros';
+  const obs=document.getElementById('mSaidaObs').value.trim();
+  if (!descricao||!data||isNaN(valor)) { toast('Preencha descrição, valor e data.',false); return; }
+  const item = id ? {id, descricao, valor, data, tag, obs} : {descricao, valor, data, tag, obs};
+  showLoading(); await dbSave('saidas', item); hideLoading();
+  fecharModal('modalSaida'); renderSaidas(); toast(id?'Saída atualizada.':'Saída registrada!');
+}
+
+async function excluirSaida(id) {
+  if (!confirm('Excluir esta saída?')) return;
+  showLoading(); await dbDelete('saidas', id); hideLoading(); renderSaidas(); toast('Removido.');
+}
+
+function limparFiltrosSaida() {
+  ['filtroSaidaTexto','filtroSaidaMes'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('filtroSaidaTag').value='';
+  renderSaidas();
+}
+
+async function renderSaidas() {
+  showLoading();
+  const saidas = await dbGetAll('saidas');
+  hideLoading();
+  await populateSaidaTagFilter();
+  const txt=(document.getElementById('filtroSaidaTexto')?.value||'').toLowerCase(),
+    tag=document.getElementById('filtroSaidaTag')?.value||'',
+    mes=document.getElementById('filtroSaidaMes')?.value||'';
+  const lista = saidas.filter(s=>{
+    if(txt&&!(s.descricao||'').toLowerCase().includes(txt)&&!(s.obs||'').toLowerCase().includes(txt)) return false;
+    if(tag&&s.tag!==tag) return false;
+    if(mes&&!s.data?.startsWith(mes)) return false;
+    return true;
+  }).sort((a,b)=>b.data.localeCompare(a.data));
+  const total = lista.reduce((s,x)=>s+(x.valor||0),0);
+  const porTag = {};
+  lista.forEach(s=>{porTag[s.tag||'Outros']=(porTag[s.tag||'Outros']||0)+(s.valor||0);});
+  const maiorTag = Object.entries(porTag).sort((a,b)=>b[1]-a[1])[0];
+  document.getElementById('saidasStatsGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total de Saídas</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(total)}</div><div class="stat-sub">${lista.length} lançamento(s)</div></div>
+    <div class="stat-card"><div class="stat-label">Maior Categoria</div><div class="stat-value" style="font-size:1.2rem;">${maiorTag?fmtBRL(maiorTag[1]):'—'}</div><div class="stat-sub">${maiorTag?maiorTag[0]:'sem dados'}</div></div>`;
+  const tbody=document.getElementById('tbodySaidas');
+  if (!lista.length) { tbody.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">💸</div><p>Nenhuma saída registrada.</p></div></td></tr>`; return; }
+  tbody.innerHTML = lista.map(s=>`<tr>
+    <td style="font-size:.8rem;">${fmtDate(s.data)}</td>
+    <td style="font-weight:500;">${s.descricao}</td>
+    <td>${tagBadgeSaida(s.tag)}</td>
+    <td style="font-weight:600;color:var(--red);">${fmtBRL(s.valor)}</td>
+    <td style="font-size:.76rem;color:var(--taupe);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${s.obs||''}</td>
+    <td class="tag-actions">
+      <button class="btn btn-ghost btn-sm" onclick="abrirModalSaida('${s.id}')">✏️</button>
+      <button class="btn btn-danger" onclick="excluirSaida('${s.id}')">✕</button>
+    </td></tr>`).join('');
+}
+
+// ── QUITAR PENDÊNCIA ──
+async function abrirQuitar(tipo, id, extra) {
+  document.getElementById('quitarTipo').value = tipo;
+  document.getElementById('quitarId').value = id;
+  document.getElementById('quitarExtra').value = extra!==undefined&&extra!==null ? extra : '';
+  document.querySelectorAll('#segQuitarPag .seg-btn').forEach(b=>b.classList.remove('seg-active','seg-green','seg-blue','seg-purple'));
+  let resumo = '';
+  if (tipo==='aten') {
+    const [atendimentos, servicos, clientes] = await Promise.all([dbGetAll('atendimentos'), dbGetAll('servicos'), dbGetAll('clientes')]);
+    const a = atendimentos.find(x=>x.id===id);
+    if (!a) return;
+    const s = servicos.find(x=>x.id===a.servicoId);
+    const cli = clientes.find(x=>x.id===a.clienteId);
+    resumo = `<strong>${cli?.nome||'Cliente'}</strong> — ${s?.nome||'Atendimento'} (${fmtDate(a.data)})<br>Valor: <strong style="color:var(--green);">${fmtBRL(a.valor)}</strong>`;
+  } else if (tipo==='venda') {
+    const [vendas, produtos, clientes] = await Promise.all([dbGetAll('vendas'), dbGetAll('produtos'), dbGetAll('clientes')]);
+    const v = vendas.find(x=>x.id===id);
+    if (!v) return;
+    const p = produtos.find(x=>x.id===v.prodId);
+    const cli = clientes.find(x=>x.id===v.clienteId);
+    resumo = `<strong>${cli?.nome||'Cliente'}</strong> — ${p?.nome||'Produto'} (${fmtDate(v.data)})<br>Valor: <strong style="color:var(--green);">${fmtBRL(v.receita)}</strong>`;
+  } else if (tipo==='evento') {
+    const eventos = await dbGetAll('eventos');
+    const e = eventos.find(x=>x.id===id);
+    if (!e) return;
+    const p = (e.participantes_lista||[])[extra];
+    if (!p) return;
+    resumo = `<strong>${p.clienteNome||'Participante'}</strong> — ${e.nome} (${fmtDate(e.data)})<br>Valor: <strong style="color:var(--green);">${fmtBRL(p.valor)}</strong>`;
+  }
+  document.getElementById('modalQuitarResumo').innerHTML = resumo;
+  abrirModal('modalQuitar');
+}
+
+async function confirmarQuitar() {
+  const tipo=document.getElementById('quitarTipo').value;
+  const id=document.getElementById('quitarId').value;
+  const extra=document.getElementById('quitarExtra').value;
+  const metodo=getSeg('segQuitarPag');
+  if (!metodo) { toast('Selecione como foi recebido.',false); return; }
+  showLoading();
+  if (tipo==='aten') {
+    const a = (await dbGetAll('atendimentos')).find(x=>x.id===id);
+    if (a) await dbSave('atendimentos', {...a, pagamento: metodo});
+  } else if (tipo==='venda') {
+    const v = (await dbGetAll('vendas')).find(x=>x.id===id);
+    if (v) await dbSave('vendas', {...v, pagamento: metodo});
+  } else if (tipo==='evento') {
+    const e = (await dbGetAll('eventos')).find(x=>x.id===id);
+    if (e) {
+      const lista = [...(e.participantes_lista||[])];
+      const idx = +extra;
+      if (lista[idx]) {
+        lista[idx] = {...lista[idx], pagamento: metodo};
+        await dbSave('eventos', {...e, participantes_lista: lista});
+      }
+    }
+  }
+  hideLoading();
+  fecharModal('modalQuitar');
+  toast('✓ Pendência quitada!');
+  if (currentPage==='dashboard') renderDashboard();
+  if (currentPage==='historico') renderHistorico();
+  if (currentPage==='eventos') renderEventos();
+  if (currentPage==='loja') renderLoja();
+  if (currentPage==='clientes') renderClientes();
+  if (document.getElementById('modalPerfilCliente').classList.contains('open')) {
+    const nomeAtual = document.querySelector('#modalPerfilConteudo')?.dataset?.clienteId;
+  }
+  if (document.getElementById('modalDetalheEvento').classList.contains('open') && tipo==='evento') {
+    abrirDetalheEvento(id);
+  }
+}
+
 // ── DASHBOARD ──
 async function renderDashboard(){
   showLoading();
-  const[atendimentos,servicos,eventos,vendas,clientes]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas'),dbGetAll('clientes')]);
+  const[atendimentos,servicos,eventos,vendas,clientes,saidas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas'),dbGetAll('clientes'),dbGetAll('saidas')]);
   hideLoading();
   const mesFiltro=document.getElementById('dashMesFiltro')?.value||'';
   const now=new Date(),mesAtual=now.toISOString().slice(0,7);
@@ -1623,17 +1863,22 @@ async function renderDashboard(){
   const atenFiltrados = mesFiltro ? atendimentos.filter(a=>a.data?.startsWith(mesFiltro)) : atendimentos;
   const evsFiltrados  = mesFiltro ? eventos.filter(e=>e.data?.startsWith(mesFiltro)) : eventos;
   const venFiltrados  = mesFiltro ? vendas.filter(v=>v.data?.startsWith(mesFiltro)) : vendas;
+  const saidasFiltradas = mesFiltro ? saidas.filter(s=>s.data?.startsWith(mesFiltro)) : saidas;
   const atenMes=atendimentos.filter(a=>a.data?.startsWith(mesAtual));
   const recAtend=atenFiltrados.reduce((s,a)=>s+(a.valor||0),0),recEvs=evsFiltrados.reduce((s,e)=>s+(e.total||0),0),recLoja=venFiltrados.reduce((s,v)=>s+(v.receita||0),0);
+  const totalSaidas=saidasFiltradas.reduce((s,x)=>s+(x.valor||0),0);
   const totalMin=atenFiltrados.reduce((s,a)=>s+(a.duracao||0),0),ticket=atenFiltrados.length?recAtend/atenFiltrados.length:0;
   const aReceber=atenFiltrados.filter(a=>a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
   const labelPeriodo = mesFiltro ? `mês selecionado` : `${atenMes.length} este mês`;
+  const receitaTotal=recAtend+recEvs+recLoja;
   document.getElementById('statsGrid').innerHTML=`
     <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${atenFiltrados.length}</div><div class="stat-sub">${labelPeriodo}</div></div>
     <div class="stat-card"><div class="stat-label">Receita Atend.</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recAtend)}</div><div class="stat-sub">${atenFiltrados.length} sessões</div></div>
     <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${evsFiltrados.length} eventos</div></div>
     <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.3rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(venFiltrados.reduce((s,v)=>s+(v.lucro||0),0))}</div></div>
-    <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recAtend+recEvs+recLoja)}</div></div>
+    <div class="stat-card"><div class="stat-label">Receita Total</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(receitaTotal)}</div></div>
+    <div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">💸 Saídas</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(totalSaidas)}</div><div class="stat-sub">${saidasFiltradas.length} lançamento(s)</div></div>
+    <div class="stat-card"><div class="stat-label">Resultado Líquido</div><div class="stat-value" style="font-size:1.2rem;color:${(receitaTotal-totalSaidas)>=0?'var(--green)':'var(--red)'};">${fmtBRL(receitaTotal-totalSaidas)}</div></div>
     <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticket)}</div><div class="stat-sub">por atendimento</div></div>
     <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${totalMin?fmtBRL(recAtend/totalMin*60)+'/h':'—'}</div></div>
     ${aReceber>0?`<div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">🔴 A Receber</div><div class="stat-value" style="font-size:1.2rem;color:var(--red);">${fmtBRL(aReceber)}</div></div>`:''}`;
@@ -1658,26 +1903,46 @@ async function renderDashboard(){
   document.getElementById('topReceita').innerHTML=servNomes.slice(0,5).length?servNomes.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">${fmtBRL(s.r)}</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
   const topT=servNomes.filter(s=>s.min>0).map(s=>({...s,rph:s.r/s.min*60})).sort((a,b)=>b.rph-a.rph);
   document.getElementById('topTempo').innerHTML=topT.slice(0,5).length?topT.slice(0,5).map((s,i)=>`<div class="rank-item"><div class="rank-num">${i+1}</div><div class="rank-info"><div class="rank-name">${s.nome}</div><div class="rank-sub">${s.count} atend. · ${(s.min/60).toFixed(1)}h</div></div><div class="rank-val">R$ ${s.rph.toFixed(0)}/h</div></div>`).join(''):`<div class="empty"><div class="empty-icon">✦</div><p>Sem dados</p></div>`;
-  // ── A RECEBER por cliente ──
-  const aReceberPorCliente=clientes.map(c=>{
-    const dAten=atenFiltrados.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
-    const dEvs=evsFiltrados.reduce((s,e)=>{const p=(e.participantes_lista||[]).find(p=>p.clienteId===c.id&&p.pagamento==='apagar');return s+(p?+p.valor:0);},0);
-    const dLoja=venFiltrados.filter(v=>v.clienteId===c.id&&v.pagamento==='apagar').reduce((s,v)=>s+(v.receita||0),0);
-    return{id:c.id,nome:c.nome,wpp:c.wpp,total:dAten+dEvs+dLoja};
+
+  // ── A RECEBER — pendências individuais por cliente, com botão QUITAR ──
+  const pendenciasPorCliente = clientes.map(c=>{
+    const itensAten = atenFiltrados.filter(a=>a.clienteId===c.id&&a.pagamento==='apagar')
+      .map(a=>({tipo:'aten',id:a.id,extra:null,label:servicos.find(x=>x.id===a.servicoId)?.nome||'Atendimento',data:a.data,valor:a.valor||0}));
+    const itensEvs = [];
+    evsFiltrados.forEach(e=>{
+      (e.participantes_lista||[]).forEach((p,idx)=>{
+        if (p.clienteId===c.id && p.pagamento==='apagar') itensEvs.push({tipo:'evento',id:e.id,extra:idx,label:e.nome,data:e.data,valor:+p.valor||0});
+      });
+    });
+    const itensLoja = venFiltrados.filter(v=>v.clienteId===c.id&&v.pagamento==='apagar')
+      .map(v=>({tipo:'venda',id:v.id,extra:null,label:'Compra na Loja',data:v.data,valor:v.receita||0}));
+    const itens = [...itensAten, ...itensEvs, ...itensLoja].sort((a,b)=>(a.data||'').localeCompare(b.data||''));
+    const total = itens.reduce((s,i)=>s+i.valor,0);
+    return {id:c.id, nome:c.nome, wpp:c.wpp, total, itens};
   }).filter(x=>x.total>0).sort((a,b)=>b.total-a.total);
   const semCliente=atenFiltrados.filter(a=>!a.clienteId&&a.pagamento==='apagar').reduce((s,a)=>s+(a.valor||0),0);
-  const totalAReceber=aReceberPorCliente.reduce((s,x)=>s+x.total,0)+semCliente;
+  const totalAReceber=pendenciasPorCliente.reduce((s,x)=>s+x.total,0)+semCliente;
   const bloco=document.getElementById('aReceberBlock'),listaEl=document.getElementById('aReceberLista');
   if(totalAReceber>0){
     bloco.style.display='block';
     let arHtml=`<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.5rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);margin-bottom:.75rem;">
-      <span style="font-size:.82rem;color:var(--taupe);">${aReceberPorCliente.length} cliente(s)${semCliente>0?' + avulsos':''}</span>
+      <span style="font-size:.82rem;color:var(--taupe);">${pendenciasPorCliente.length} cliente(s)${semCliente>0?' + avulsos':''}</span>
       <span style="font-size:1.15rem;font-weight:700;color:var(--red);">Total: ${fmtBRL(totalAReceber)}</span>
     </div>`;
-    arHtml+=aReceberPorCliente.map(x=>{const wn=x.wpp?x.wpp.replace(/\D/g,''):'';return`<div class="rank-item">
-      <div class="rank-info"><div class="rank-name" style="cursor:pointer;" onclick="abrirPerfilCliente('${x.id}')">${x.nome}</div></div>
-      ${x.wpp?`<a href="https://wa.me/55${wn}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;padding:.2rem .55rem;font-size:.65rem;margin-right:.4rem;">WPP</a>`:''}
-      <div class="rank-val" style="color:var(--red);">${fmtBRL(x.total)}</div>
+    arHtml+=pendenciasPorCliente.map(x=>{const wn=x.wpp?x.wpp.replace(/\D/g,''):'';
+      const itensHtml=x.itens.map(i=>`<div class="pendencia-row">
+        <span style="font-size:.72rem;color:var(--taupe);min-width:64px;">${fmtDate(i.data)}</span>
+        <span style="flex:1;font-size:.8rem;">${i.label}</span>
+        <span style="font-size:.82rem;font-weight:600;color:var(--red);">${fmtBRL(i.valor)}</span>
+        <button class="btn btn-quitar" onclick="abrirQuitar('${i.tipo}','${i.id}',${i.extra===null?'null':i.extra})">QUITAR</button>
+      </div>`).join('');
+      return`<div class="rank-item" style="flex-direction:column;align-items:stretch;gap:.4rem;">
+      <div style="display:flex;align-items:center;gap:.5rem;">
+        <div class="rank-info" style="flex:1;"><div class="rank-name" style="cursor:pointer;" onclick="abrirPerfilCliente('${x.id}')">${x.nome}</div></div>
+        ${x.wpp?`<a href="https://wa.me/55${wn}" target="_blank" class="btn btn-sm" style="background:#25D366;color:#fff;border:none;text-decoration:none;padding:.2rem .55rem;font-size:.65rem;">WPP</a>`:''}
+        <div class="rank-val" style="color:var(--red);">${fmtBRL(x.total)}</div>
+      </div>
+      <div style="padding-left:.25rem;">${itensHtml}</div>
     </div>`;}).join('');
     if(semCliente>0)arHtml+=`<div class="rank-item"><div class="rank-info"><div class="rank-name" style="color:var(--taupe);">Sem cliente vinculado</div></div><div class="rank-val" style="color:var(--red);">${fmtBRL(semCliente)}</div></div>`;
     listaEl.innerHTML=arHtml;
@@ -1755,13 +2020,15 @@ function initRelatorio(){
 }
 async function gerarRelatorio(){
   showLoading();
-  const[atendimentos,servicos,eventos,vendas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas')]);
+  const[atendimentos,servicos,eventos,vendas,saidas]=await Promise.all([dbGetAll('atendimentos'),dbGetAll('servicos'),dbGetAll('eventos'),dbGetAll('vendas'),dbGetAll('saidas')]);
   hideLoading();
   const inicio=document.getElementById('relDataInicio').value,fim=document.getElementById('relDataFim').value;
   const aten=atendimentos.filter(a=>(!inicio||a.data>=inicio)&&(!fim||a.data<=fim));
   const evs=eventos.filter(e=>(!inicio||e.data>=inicio)&&(!fim||e.data<=fim));
   const vens=vendas.filter(v=>(!inicio||v.data>=inicio)&&(!fim||v.data<=fim));
+  const saidasPeriodo=saidas.filter(s=>(!inicio||s.data>=inicio)&&(!fim||s.data<=fim));
   const recAtend=aten.reduce((s,a)=>s+(a.valor||0),0),recEvs=evs.reduce((s,e)=>s+(e.total||0),0),recLoja=vens.reduce((s,v)=>s+(v.receita||0),0),lucroLoja=vens.reduce((s,v)=>s+(v.lucro||0),0);
+  const totalSaidas=saidasPeriodo.reduce((s,x)=>s+(x.valor||0),0);
   const totalMin=aten.reduce((s,a)=>s+(a.duracao||0),0),ticket=aten.length?recAtend/aten.length:0,rph=totalMin?recAtend/totalMin*60:0;
   const byServ={};aten.forEach(a=>{if(!byServ[a.servicoId])byServ[a.servicoId]={r:0,count:0,min:0};byServ[a.servicoId].r+=(a.valor||0);byServ[a.servicoId].count++;byServ[a.servicoId].min+=(a.duracao||0);});
   const rows=Object.entries(byServ).map(([id,d])=>{const s=servicos.find(x=>x.id===id);return{nome:s?.nome||'—',...d,rph:d.min?d.r/d.min*60:0,pct:recAtend?(d.r/recAtend*100).toFixed(1):'0'};}).sort((a,b)=>b.r-a.r);
@@ -1769,6 +2036,7 @@ async function gerarRelatorio(){
   const byMod={};aten.forEach(a=>{const m=a.modalidade||'Não inf.';byMod[m]=(byMod[m]||0)+1;});
   const pagLbl={pix:'💠 PIX',cartao:'💳 Cartão',dinheiro:'💵 Dinheiro',troca:'🤝 Troca','Não inf.':'Não informado'};
   const modLbl={presencial:'🏠 Presencial',online:'💻 Online',wpp:'📱 WhatsApp','Não inf.':'Não informado'};
+  const byTag={};saidasPeriodo.forEach(s=>{const t=s.tag||'Outros';byTag[t]=(byTag[t]||0)+(s.valor||0);});
   document.getElementById('relatorioConteudo').innerHTML=`
     <div class="stats-grid" style="margin-bottom:1.5rem;">
       <div class="stat-card"><div class="stat-label">Atendimentos</div><div class="stat-value">${aten.length}</div></div>
@@ -1776,6 +2044,8 @@ async function gerarRelatorio(){
       <div class="stat-card"><div class="stat-label">Receita Eventos</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recEvs)}</div><div class="stat-sub">${evs.length} eventos</div></div>
       <div class="stat-card"><div class="stat-label">Receita Loja</div><div class="stat-value" style="font-size:1.2rem;">${fmtBRL(recLoja)}</div><div class="stat-sub">Lucro: ${fmtBRL(lucroLoja)}</div></div>
       <div class="stat-card"><div class="stat-label">Total Geral</div><div class="stat-value" style="font-size:1.1rem;">${fmtBRL(recAtend+recEvs+recLoja)}</div></div>
+      <div class="stat-card" style="border-color:var(--red);"><div class="stat-label" style="color:var(--red);">Saídas</div><div class="stat-value" style="font-size:1.1rem;color:var(--red);">${fmtBRL(totalSaidas)}</div></div>
+      <div class="stat-card"><div class="stat-label">Resultado Líquido</div><div class="stat-value" style="font-size:1.1rem;color:${(recAtend+recEvs+recLoja-totalSaidas)>=0?'var(--green)':'var(--red)'};">${fmtBRL(recAtend+recEvs+recLoja-totalSaidas)}</div></div>
       <div class="stat-card"><div class="stat-label">Ticket Médio</div><div class="stat-value">${fmtBRL(ticket)}</div></div>
       <div class="stat-card"><div class="stat-label">Horas</div><div class="stat-value">${(totalMin/60).toFixed(1)}h</div><div class="stat-sub">${fmtBRL(rph)}/h</div></div>
     </div>
@@ -1790,6 +2060,7 @@ async function gerarRelatorio(){
           <td>${(r.min/60).toFixed(1)}h</td><td>${fmtBRL(r.rph)}</td><td>${fmtBRL(r.count?r.r/r.count:0)}</td></tr>`).join('')}
       </tbody></table></div>`:'<p style="color:var(--taupe);font-size:.85rem;">Sem atendimentos no período.</p>'}
     </div>
+    ${Object.keys(byTag).length?`<div class="card mb-3"><div class="card-title">Saídas por Categoria</div>${Object.entries(byTag).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="rank-item" style="padding:.5rem 0;"><div class="rank-info"><div class="rank-name">${tagBadgeSaida(k)}</div></div><div class="rank-val" style="color:var(--red);">${fmtBRL(v)}</div></div>`).join('')}</div>`:''}
     ${evs.length?`<div class="card mb-3"><div class="card-title">Eventos no Período</div><div class="table-wrap"><table><thead><tr><th>Data</th><th>Tipo</th><th>Nome</th><th>Part.</th><th>Receita</th></tr></thead><tbody>
       ${evs.sort((a,b)=>b.data.localeCompare(a.data)).map(e=>`<tr><td>${fmtDate(e.data)}</td><td><span class="badge badge-purple">${e.tipo}</span></td><td>${e.nome}</td><td>${e.participantes||0}</td><td style="font-weight:600;color:var(--green);">${fmtBRL(e.total)}</td></tr>`).join('')}
     </tbody></table></div></div>`:''}`;
@@ -1823,13 +2094,13 @@ let _parcelasTemp=null;
 async function seedInicial(){
   const existing=await dbGetAll('servicos');if(existing.length)return;
   const servicos=[
-    {nome:'Direcionamento Baralho Cigano',duracao:60,valor:165,cor:'badge-gold'},
-    {nome:'Apometria (Janaina)',duracao:60,valor:185,cor:'badge-gold'},
+    {nome:'Direcionamento Baralho Cigano',duracao:60,valor:180,cor:'badge-gold'},
+    {nome:'Apometria (Janaina)',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Barras de Access',duracao:60,valor:185,cor:'badge-gold'},
-    {nome:'Reiki Universal e de Limpeza',duracao:60,valor:185,cor:'badge-gold'},
+    {nome:'Reiki Universal e de Limpeza',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Alinhamento Neuro Energético',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Ativação Kundalini',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Divórcio Energético',duracao:60,valor:185,cor:'badge-gold'},
+    {nome:'Divórcio Energético',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Leitura de Registro Akáshicos',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Mesa Radionica Cigana',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Mesa Radiônica Apometrica',duracao:60,valor:200,cor:'badge-gold'},
@@ -1837,13 +2108,13 @@ async function seedInicial(){
     {nome:'Balão Gástrico (Hipnose)',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Renascimento',duracao:60,valor:200,cor:'badge-gold'},
     {nome:'Mesa Radionica Divórcio Energético',duracao:60,valor:200,cor:'badge-gold'},
-    {nome:'Constelação F. (particular) bonecos',duracao:90,valor:230,cor:'badge-green'},
-    {nome:'Constelação Familiar em grupo',duracao:90,valor:230,cor:'badge-green'},
+    {nome:'Constelação F. (particular) bonecos',duracao:90,valor:250,cor:'badge-green'},
+    {nome:'Constelação Familiar em grupo',duracao:90,valor:250,cor:'badge-green'},
     {nome:'Hipnose (TOC, Fobias, Traumas...)',duracao:60,valor:200,cor:'badge-green'},
-    {nome:'Acupuntura',duracao:45,valor:130,cor:'badge-green'},
+    {nome:'Acupuntura',duracao:45,valor:150,cor:'badge-green'},
     {nome:'Eletrochoque para traumas físicos',duracao:45,valor:150,cor:'badge-green'},
-    {nome:'Aurícula',duracao:45,valor:130,cor:'badge-green'},
-    {nome:'Apometria (Luiz)',duracao:60,valor:185,cor:'badge-green'},
+    {nome:'Auriculoterapia',duracao:45,valor:150,cor:'badge-green'},
+    {nome:'Apometria (Luiz)',duracao:60,valor:200,cor:'badge-green'},
     {nome:'Reiki (Luiz)',duracao:60,valor:185,cor:'badge-green'},
     {nome:'Vela de Mel — Adoçamento',duracao:30,valor:40,cor:'badge-brown'},
     {nome:'Divórcio Energético com Velas',duracao:30,valor:60,cor:'badge-brown'},
@@ -1858,6 +2129,43 @@ async function seedInicial(){
   showLoading();
   await Promise.all([...servicos.map(s=>dbSave('servicos',s)),...produtos.map(p=>dbSave('produtos',p))]);
   hideLoading();
+}
+
+// ── MIGRAÇÃO DE PREÇOS (agosto/2026) ──
+// Atualiza os valores de serviços já cadastrados para bater com a tabela de preços
+// nova, sem duplicar registros e sem mexer em atendimentos já lançados no histórico.
+async function migrarPrecos2026(){
+  const FLAG_ID = 'precos_2026_08';
+  const flags = await dbGetAll('config_flags');
+  if (flags.find(f=>f.id===FLAG_ID)) return; // já migrado
+
+  const novosValores = {
+    'direcionamento baralho cigano': 180,
+    'apometria (janaina)': 200,
+    'apometria (luiz)': 200,
+    'reiki universal e de limpeza': 200,
+    'divórcio energético': 200,
+    'constelação f. (particular) bonecos': 250,
+    'constelação familiar em grupo': 250,
+    'aurícula': 150,
+    'auriculoterapia': 150,
+    'acupuntura': 150,
+  };
+  const renomear = { 'aurícula': 'Auriculoterapia' };
+
+  const servicos = await dbGetAll('servicos');
+  const atualizacoes = [];
+  servicos.forEach(s=>{
+    const chave=(s.nome||'').toLowerCase().trim();
+    if (chave in novosValores) {
+      const novoNome = renomear[chave] || s.nome;
+      if (s.valor !== novosValores[chave] || novoNome !== s.nome) {
+        atualizacoes.push(dbSave('servicos', {...s, nome:novoNome, valor:novosValores[chave]}));
+      }
+    }
+  });
+  if (atualizacoes.length) await Promise.all(atualizacoes);
+  await dbSave('config_flags', {id:FLAG_ID, aplicadoEm:new Date().toISOString()});
 }
 
 // ── INIT ──
